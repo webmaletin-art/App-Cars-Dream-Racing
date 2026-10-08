@@ -83,8 +83,11 @@ core/  (Kotlin/JVM puro, sin Android → testeable)        app/  (Android)
   se listan en «PIEZAS RELACIONADAS» del vehículo (y se pueden añadir a la escena), o aparecen como «DFF sospechoso» si no se puede decidir a quién pertenecen.
 * **Duplicados lógicos**: misma ruta/nombre normalizado + tamaño + CRC → una sola tarjeta (se listan los duplicados). Si difieren, se conservan como «Nombre» y «Nombre (2)».
 * **Nombres**: carpeta específica del vehículo → nombre del DFF → nombre del TXD; «audi_a3»/«audi-a3»/«AudiA3» → «Audi A3»; los `.fxt/.txt` solo mejoran el nombre (`DeclasseYosemite.fxt` → «Declasse Yosemite»).
-* **Ruedas**: GTA SA guarda *una* plantilla `wheel` + dummies `wheel_lf/rf/lb/rb(/lm/rm)_dummy`. La app instancia la plantilla en cada dummy (FL/FR/RL/RR), igual que el juego; las ruedas del lado derecho se giran 180° respecto de la plantilla
-  (lado izquierdo) si el dummy no trae ya esa rotación. Variantes `_dam`/`_vlo` se cargan **ocultas por defecto** (no eliminadas; se activan en el Árbol).
+* **Ruedas** (`model/WheelOrientation.kt`): GTA SA puede traer una plantilla `wheel` + dummies `wheel_*_dummy`, o (como en el DFF real que sirvió de referencia) un atomic de rueda por esquina con copias idénticas y matriz identidad.
+  Con la matriz del frame sola, las ruedas de un lado quedan mirando hacia dentro. La app **detecta en la geometría qué lado del eje es el exterior** (3 señales independientes: materiales llanta vs. freno/sombra, media axial del interior, plano dominante
+  perpendicular al eje) y, con la matriz real del punto de montaje, **gira 180° sobre el eje vertical (rotación propia, sin espejo ni escala negativa) solo la instancia cuya cara exterior apuntaría hacia el centro del vehículo**. No depende del lado
+  nombrado (si la plantilla se modela al revés, se giran las otras) ni duplica geometría; los hijos (logos) acompañan a su rueda. Si las señales no bastan, se respeta la matriz del DFF y se avisa en el diagnóstico.
+  Variantes `_dam`/`_vlo` se cargan **ocultas por defecto** (no eliminadas; se activan en el Outliner).
 * **Texturas por nombre** (Material → Texture → TXD, sin distinguir mayúsculas ni extensión `.png`), nunca por orden. Si falta: se mantiene el material (color) y se avisa.
 * **Pintura**: los materiales marcador de SA (verde 60,255,0 = primario; magenta 255,0,175 = secundario) se sustituyen por un color elegible en el visor y en la exportación.
 

@@ -43,8 +43,11 @@ class ModelPipelineTest {
         assertEquals(1, wheels.map { it.subMeshes[0].geometry.id }.toSet().size)
         val fl = wheels.first { it.wheelSlot == WheelSlot.FL }; val fr = wheels.first { it.wheelSlot == WheelSlot.FR }
         assertEquals(-0.9f, fl.transform[12]); assertEquals(0.9f, fr.transform[12])
-        assertEquals(-1f, fr.transform[0], "rueda derecha girada 180° respecto de la plantilla")
+        // Ya NO se aplica un giro arbitrario de 180° a las ruedas derechas: la plantilla de este test es una caja simétrica
+        // (orientación no determinable) y entonces se respeta tal cual la matriz de cada punto de montaje.
+        assertEquals(1f, fr.transform[0], "sin evidencia geométrica no se gira nada")
         assertEquals(1f, fl.transform[0])
+        assertTrue(m.warnings.any { it.contains("no determinable") })
         // chassis tiene 2 materiales -> 2 sub-meshes
         assertEquals(2, m.parts.first { it.name == "chassis" }.subMeshes.size)
         // variante dañada oculta por defecto pero presente

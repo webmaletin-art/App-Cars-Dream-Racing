@@ -123,13 +123,15 @@ class GtaSaVehicleBuilder(
         return b
     }
 
-    private fun frameWorldMatrices(doc: DffDocument): List<FloatArray> {
+    /** @param localAdjust corrección (espacio local del frame) por índice de frame: local' = local × ajuste; los hijos la heredan. */
+    private fun frameWorldMatrices(doc: DffDocument, localAdjust: Map<Int, FloatArray> = emptyMap()): List<FloatArray> {
         val n = doc.frames.size
         val world = arrayOfNulls<FloatArray>(n)
         fun compute(i: Int, depth: Int): FloatArray {
             world[i]?.let { return it }
             val f = doc.frames[i]
-            val local = Mat4.fromFrame(f.rotation, f.position)
+            var local = Mat4.fromFrame(f.rotation, f.position)
+            localAdjust[i]?.let { local = Mat4.multiply(local, it) }
             val res = if (f.parent in 0 until n && f.parent != i && depth < n) Mat4.multiply(compute(f.parent, depth + 1), local) else local
             world[i] = res
             return res
@@ -138,7 +140,7 @@ class GtaSaVehicleBuilder(
     }
 
     private fun buildParts(doc: DffDocument, acc: Acc, ids: Ids, extraSource: String?): List<MeshPart> {
-        val world = frameWorldMatrices(doc)
+        val baseWorld = frameWorldMatrices(doc)
         val geometryCache = HashMap<Int, GeometryData?>()
         val subCache = HashMap<Int, List<Triple<GeometryData, MaterialInfo, IntArray>>>()
 
@@ -152,6 +154,31 @@ class GtaSaVehicleBuilder(
                 Triple(gd, materialFor(g, matIdx, acc), idx)
             }
         }
+
+        // --- Orientación de ruedas deducida de la geometría + la matriz real del punto de montaje (ver WheelOrientation)
+        fun piecesOf(subs: List<Triple<GeometryData, MaterialInfo, IntArray>>) =
+            subs.map { WheelOrientation.Piece(it.first, it.third, it.second.textureName) }
+        val wheelFrameFix = HashMap<Int, FloatArray>()
+        val templateFrameName = { a: DffAtomic -> doc.frames.getOrNull(a.frameIndex)?.name?.lowercase() }
+        val wheelDummyRegex = Regex("^wheel_(lf|rf|lb|rb|lr|rr|lm|rm)(_dummy)?$")
+        val hasWheelTemplate = doc.atomics.any { templateFrameName(it).let { n -> n == "wheel" || n == "wheel_ok" } } &&
+            doc.frames.any { f -> f.name?.lowercase()?.let { wheelDummyRegex.matches(it) } == true && doc.atomics.none { a -> a.frameIndex == f.index } }
+        for (a in doc.atomics) {
+            val fr = doc.frames.getOrNull(a.frameIndex) ?: continue
+            val cls = PartClassifier.classify(fr.name)
+            if (cls.category != PartCategory.WHEEL || cls.variant != null) continue
+            if (hasWheelTemplate && templateFrameName(a).let { it == "wheel" || it == "wheel_ok" }) continue // se trata al instanciar
+            val g = doc.geometries.getOrNull(a.geometryIndex) ?: continue
+            val outcome = WheelOrientation.analyze(piecesOf(subsFor(g)))
+            val an = outcome.analysis
+            if (an == null) { acc.warnings += "Rueda '${fr.name}': orientación no determinable (${outcome.reason}); se respeta la matriz del DFF"; continue }
+            val d = WheelOrientation.decide(an, baseWorld[fr.index])
+            if (d.correction != null) {
+                wheelFrameFix[fr.index] = d.correction.local
+                acc.warnings += "Rueda '${fr.name}': ${d.correction.note} (señales: ${an.cues.joinToString("; ")})"
+            }
+        }
+        val world = if (wheelFrameFix.isEmpty()) baseWorld else frameWorldMatrices(doc, wheelFrameFix)
 
         val anyRendered = doc.atomics.any { it.isRendered }
         val framesWithAtomic = doc.atomics.map { it.frameIndex }.toSet()
@@ -176,11 +203,21 @@ class GtaSaVehicleBuilder(
             val g = doc.geometries.getOrNull(templateAtomic.geometryIndex)
             val subs = g?.let { subsFor(it) }.orEmpty()
             if (subs.isNotEmpty()) {
+                // Orientación de la plantilla deducida de su geometría; cada instancia se corrige SOLO si, con la matriz
+                // real de su punto de montaje, la cara exterior apuntaría hacia el centro del vehículo.
+                val outcome = WheelOrientation.analyze(piecesOf(subs))
+                val an = outcome.analysis
+                if (an == null) acc.warnings += "Rueda plantilla: orientación no determinable (${outcome.reason}); las instancias usan la matriz de su punto de montaje sin cambios"
                 for (d in emptyDummies.sortedBy { PartClassifier.wheelSlot(it.name!!.lowercase())?.ordinal ?: 99 }) {
                     val slot = PartClassifier.wheelSlot(d.name!!.lowercase())
                     var m = world[d.index]
-                    val isRight = slot == WheelSlot.FR || slot == WheelSlot.RR || slot == WheelSlot.MR
-                    if (isRight && m[0] > 0.5f) m = Mat4.multiply(m, Mat4.rotZ180()) // la rueda se modela una vez (lado izquierdo)
+                    if (an != null) {
+                        val dec = WheelOrientation.decide(an, m)
+                        dec.correction?.let { c ->
+                            m = Mat4.multiply(m, c.local)
+                            acc.warnings += "Rueda ${slot?.short ?: d.name}: ${c.note} (señales: ${an.cues.joinToString("; ")})"
+                        }
+                    }
                     val pid = ids.part++
                     val name = uniqueName(slot?.let { "Wheel ${it.short}" } ?: d.name)
                     parts += MeshPart(
