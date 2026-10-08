@@ -32,7 +32,6 @@ private fun FormatRow(selected: ExportFormat, onSelect: (ExportFormat) -> Unit) 
 fun ExportDialog(vm: AppViewModel, onDismiss: () -> Unit, onGo: (ExportFormat, ExportScope) -> Unit) {
     var fmtAll by remember { mutableStateOf(ExportFormat.GLB) }
     var fmtSel by remember { mutableStateOf(ExportFormat.GLB) }
-    var full by remember { mutableStateOf(false) }
     val selCount = vm.editState.selection.size
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -42,15 +41,9 @@ fun ExportDialog(vm: AppViewModel, onDismiss: () -> Unit, onGo: (ExportFormat, E
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 SectionTitle("EXPORTAR VEHÍCULO")
                 FormatRow(fmtAll) { fmtAll = it }
-                Row(Modifier.fillMaxWidth().clickable { full = false }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !full, onClick = { full = false })
-                    Text("Escena actual (lo que está visible${if (vm.isEdited) ", editada" else ""})", fontSize = 13.sp)
-                }
-                Row(Modifier.fillMaxWidth().clickable { full = true }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = full, onClick = { full = true })
-                    Text("Vehículo completo (ignora ediciones)", fontSize = 13.sp)
-                }
-                Button(onClick = { onGo(fmtAll, if (full) ExportScope.FULL else ExportScope.VISIBLE) }, modifier = Modifier.fillMaxWidth()) { Text("EXPORTAR", fontWeight = FontWeight.Bold) }
+                Text("Se exporta exactamente lo que está visible${if (vm.isEdited) " (vehículo editado)" else ""}: partes marcadas = incluidas, desmarcadas = fuera.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                vm.counters?.let { Text("Partes visibles: ${it.partsVisible} / ${it.partsTotal}", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                Button(onClick = { onGo(fmtAll, ExportScope.VISIBLE) }, modifier = Modifier.fillMaxWidth()) { Text("EXPORTAR ESTE VEHÍCULO", fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(12.dp)); HorizontalDivider(); Spacer(Modifier.height(6.dp))
                 SectionTitle("EXPORTAR SELECCIÓN")
                 if (selCount == 0) Text("Seleccione piezas en el modo edición (p. ej. las 4 ruedas) para exportarlas por separado.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -118,6 +111,96 @@ fun InfoDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 if (m.warnings.isNotEmpty()) {
                     SectionTitle("AVISOS")
                     m.warnings.distinct().take(25).forEach { Text("• $it", fontSize = 11.sp, color = Warn) }
+                }
+            }
+        },
+    )
+}
+
+
+@Composable
+fun PrepDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    val o = vm.prepOptions
+    @Composable fun row(label: String, checked: Boolean, onChange: (Boolean) -> Unit) =
+        Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) { Checkbox(checked, onChange); Text(label, fontSize = 14.sp) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
+        title = { Text("Preparación para mi juego") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Valores iniciales para preparar vehículos. Después cada vehículo se ajusta en su Outliner y su configuración individual tiene prioridad.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                row("Eliminar ruedas", o.removeWheels) { vm.prepOptions = o.copy(removeWheels = it) }
+                row("Eliminar suspensión rígida", o.removeSuspension) { vm.prepOptions = o.copy(removeSuspension = it) }
+                row("Eliminar discos/frenos", o.removeBrakes) { vm.prepOptions = o.copy(removeBrakes = it) }
+                row("Eliminar otras piezas (sin clasificar)", o.removeOther) { vm.prepOptions = o.copy(removeOther = it) }
+                Spacer(Modifier.height(10.dp))
+                Button(onClick = { onDismiss(); vm.prepareSelected() }, enabled = vm.selectedIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+                    Text("APLICAR A LOS ${vm.selectedIds.size} SELECCIONADOS", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text("Solo afecta a vehículos sin configuración propia (no revisados). Los editados o listos no se tocan.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+    )
+}
+
+@Composable
+fun BatchConfirmDialog(c: com.webmaletin.gtaviewer.BatchConfirm, format: ExportFormat, onYes: () -> Unit, onNo: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onNo,
+        confirmButton = { TextButton(onClick = onYes) { Text("EXPORTAR DE TODOS MODOS") } },
+        dismissButton = { TextButton(onClick = onNo) { Text("Cancelar") } },
+        title = { Text("Exportar ${c.items.size} vehículos (${format.name})") },
+        text = { Text("${c.unreviewed} vehículo(s) están SIN REVISAR y se exportarán con todas sus partes visibles (incluidas las ruedas originales), porque no tienen configuración propia. " +
+            "Puede abrirlos y usar «Preparar para mi juego» antes.", fontSize = 13.sp) },
+    )
+}
+
+@Composable
+fun BatchDialog(vm: AppViewModel, onShare: (java.io.File, String, String) -> Unit) {
+    val b = vm.batchUi ?: return
+    AlertDialog(
+        onDismissRequest = { vm.dismissBatch() },
+        title = { Text(if (b.finished) "EXPORTACIÓN COMPLETADA" else "EXPORTANDO VEHÍCULOS") },
+        confirmButton = {
+            if (b.finished) { if (b.zipFile != null) TextButton(onClick = { vm.pendingBatchSave = b.zipFile }) { Text("Guardar ${b.zipName}") } }
+            else TextButton(onClick = { vm.cancelBatch() }) { Text("Cancelar") }
+        },
+        dismissButton = {
+            if (b.finished) Row {
+                if (b.zipFile != null) TextButton(onClick = { onShare(b.zipFile, "application/zip", b.zipName) }) { Text("Compartir") }
+                TextButton(onClick = { vm.dismissBatch() }) { Text("Cerrar") }
+            }
+        },
+        text = {
+            Column {
+                val done = b.lines.count { it.state != com.webmaletin.gtaviewer.export.BatchState.PROCESSING }
+                Text("$done / ${b.total}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Accent)
+                LinearProgressIndicator(progress = { if (b.total == 0) 0f else done.toFloat() / b.total }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), color = Accent)
+                if (b.finished && b.result != null) {
+                    val r = b.result
+                    Text("${r.total} seleccionados\n${r.okCount} correctos\n${r.errors.size} errores" + if (r.cancelled) "\n(cancelada por el usuario)" else "", fontWeight = FontWeight.SemiBold)
+                    if (b.zipFile == null) Text("No se generó ZIP: ningún vehículo se exportó correctamente.", color = Bad, fontSize = 12.sp)
+                    else Text("${b.zipName} contiene solo los ${r.okCount} ${b.format.name} correctos.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(6.dp))
+                }
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    items(b.lines.size) { i ->
+                        val l = b.lines[i]
+                        val (sym, col) = when (l.state) {
+                            com.webmaletin.gtaviewer.export.BatchState.OK -> "✓ Exportado" to Good
+                            com.webmaletin.gtaviewer.export.BatchState.WARNING -> "✓ Exportado con avisos" to Warn
+                            com.webmaletin.gtaviewer.export.BatchState.ERROR -> "✕" to Bad
+                            com.webmaletin.gtaviewer.export.BatchState.CANCELLED -> "— cancelado" to Warn
+                            com.webmaletin.gtaviewer.export.BatchState.PROCESSING -> "⏳ Procesando..." to Accent
+                        }
+                        Column(Modifier.padding(vertical = 3.dp)) {
+                            Text(l.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (l.state == com.webmaletin.gtaviewer.export.BatchState.ERROR) "✕ ${l.name} — ${l.message}" else sym + (l.message?.let { " ($it)" } ?: ""), color = col, fontSize = 11.sp)
+                        }
+                    }
                 }
             }
         },

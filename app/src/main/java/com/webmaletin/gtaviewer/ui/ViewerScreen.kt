@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -56,7 +57,7 @@ fun ViewerScreen(vm: AppViewModel) {
             factory = { ctx ->
                 GlViewerView(ctx).also { v ->
                     v.onTap = { x, y, w, h ->
-                        if (vm.editMode) vm.pick(x, y, w, h) { synchronized(v.camera) { v.camera.rayFor(x, y, w, h) } }
+                        vm.pick { synchronized(v.camera) { v.camera.rayFor(x, y, w, h) } }
                     }
                     v.onDoubleTap = { vm.requestCamera(null) }
                     gl = v
@@ -72,7 +73,9 @@ fun ViewerScreen(vm: AppViewModel) {
                 TextButton(onClick = { vm.closeVehicle() }) { Text("←") }
                 Column(Modifier.weight(1f)) {
                     Text(model.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${model.parts.size} piezas · ${model.totalTriangles} tri · ${model.totalVertices} vért", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val c = vm.counters
+                    Text(if (c == null) "" else "Partes visibles: ${c.partsVisible} / ${c.partsTotal} · Meshes visibles: ${c.meshesVisible} / ${c.meshesTotal}", fontSize = 11.sp, color = Accent)
+                    vm.currentItem?.let { Text("${it.manual.let { m -> if (m) "Manual · " else "" }}${vm.statusOf(it.id).symbol} ${vm.statusOf(it.id).label}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 TextButton(onClick = { showInfo = true }) { Text("INFO") }
                 TextButton(onClick = { vm.navigate(Screen.DIAGNOSTICS) }) { Text("DIAG.") }
@@ -89,12 +92,32 @@ fun ViewerScreen(vm: AppViewModel) {
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()) {
             CameraBar(vm)
             if (vm.editMode) EditPanel(vm, onExport = { showExport = true })
-            Row(Modifier.fillMaxWidth().background(Color(0xE6121418)).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val editBtn = ButtonDefaults.buttonColors(containerColor = if (vm.editMode) Accent else PanelHi, contentColor = if (vm.editMode) Color(0xFF1B1200) else Color.White)
-                Button(onClick = { vm.editMode = !vm.editMode }, colors = editBtn, modifier = Modifier.weight(1f)) {
-                    Text(if (vm.editMode) "MODO EDICIÓN ✓" else "EDITAR PIEZAS", fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth().background(Color(0xE6121418)).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val on = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF1B1200))
+                val off = ButtonDefaults.buttonColors(containerColor = PanelHi, contentColor = Color.White)
+                Button(onClick = { vm.outlinerOpen = !vm.outlinerOpen; if (vm.outlinerOpen) vm.editMode = false }, colors = if (vm.outlinerOpen) on else off, modifier = Modifier.weight(1f), contentPadding = PaddingValues(4.dp)) {
+                    Text("OUTLINER", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
-                Button(onClick = { showExport = true }, modifier = Modifier.weight(1f)) { Text("EXPORTAR", fontWeight = FontWeight.Bold) }
+                Button(onClick = { vm.editMode = !vm.editMode; if (vm.editMode) vm.outlinerOpen = false }, colors = if (vm.editMode) on else off, modifier = Modifier.weight(1f), contentPadding = PaddingValues(4.dp)) {
+                    Text("EDITAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+                Button(onClick = { showExport = true }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(4.dp)) { Text("EXPORTAR", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            }
+        }
+
+        // ---- información de la pieza tocada (también sin abrir paneles)
+        if (!vm.outlinerOpen && !vm.editMode && vm.editState.selection.isNotEmpty()) {
+            Surface(color = Color(0xE6181C23), shape = RoundedCornerShape(10.dp), modifier = Modifier.align(Alignment.CenterStart).padding(10.dp).widthIn(max = 280.dp)) {
+                Column(Modifier.padding(10.dp)) { SelectionInfo(vm, model) }
+            }
+        }
+
+        // ---- Outliner lateral
+        if (vm.outlinerOpen) {
+            val w = minOf(360, (LocalConfiguration.current.screenWidthDp * 0.88f).toInt()).dp
+            Surface(color = Color(0xF2181C23), modifier = Modifier.align(Alignment.CenterEnd).statusBarsPadding().padding(top = 56.dp, bottom = 112.dp)
+                .fillMaxHeight().width(w), shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)) {
+                OutlinerPanel(vm, onExport = { showExport = true })
             }
         }
     }
@@ -112,7 +135,7 @@ private fun ReviewBanner(vm: AppViewModel) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(onClick = { vm.requestCamera(null, robust = true) }, label = { Text("Encuadre por geometría") })
                 FilterChip(selected = vm.normalizeScale, onClick = { vm.chooseNormalizeScale(!vm.normalizeScale) }, label = { Text("Normalizar escala (×%.3g)".format(m.validation.suggestedScale)) })
-                AssistChip(onClick = { vm.editMode = true; vm.editTab = com.webmaletin.gtaviewer.EditTab.TREE }, label = { Text("Mostrar estructura") })
+                AssistChip(onClick = { vm.outlinerOpen = true; vm.editMode = false }, label = { Text("Mostrar estructura") })
             }
         }
     }

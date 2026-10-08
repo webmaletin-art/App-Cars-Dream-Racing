@@ -41,14 +41,17 @@ fun AppRoot(vm: AppViewModel) {
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importZips(uris) }
     val dffLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u -> if (u != null) vm.setManualDffFromUri(u) }
     val txdLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u -> if (u != null) vm.setManualTxdFromUri(u) }
-    val saveZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u -> if (u != null) vm.saveExportTo(u) else vm.pendingSave = null }
-    val saveBin = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { u -> if (u != null) vm.saveExportTo(u) else vm.pendingSave = null }
+    val saveZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u -> if (u != null) vm.saveExportTo(u) else { vm.pendingSave = null; vm.pendingBatchSave = null } }
+    val saveBin = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { u -> if (u != null) vm.saveExportTo(u) else { vm.pendingSave = null; vm.pendingBatchSave = null } }
 
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
     // Tras exportar se ofrece guardar con el selector de archivos del sistema
     LaunchedEffect(vm.pendingSave) {
         vm.pendingSave?.let { if (it.suggestedName.endsWith(".zip")) saveZip.launch(it.suggestedName) else saveBin.launch(it.suggestedName) }
     }
+
+    // Al terminar la exportación masiva se ofrece guardar VEHICULOS_GLB.zip con el selector del sistema
+    LaunchedEffect(vm.pendingBatchSave) { vm.pendingBatchSave?.let { saveZip.launch(it.name) } }
 
     BackHandler(enabled = vm.screen != Screen.HOME) { vm.back() }
 
@@ -57,13 +60,14 @@ fun AppRoot(vm: AppViewModel) {
         cm.setPrimaryClip(ClipData.newPlainText("diagnóstico", text))
         vm.message = "Copiado al portapapeles"
     }
-    val share: (ExportResultUi) -> Unit = { res ->
-        val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", res.file)
+    val shareFile: (java.io.File, String, String) -> Unit = { file, mime, name ->
+        val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val i = Intent(Intent.ACTION_SEND).apply {
-            type = res.output.mime; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            type = mime; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(i, "Compartir ${res.suggestedName}"))
+        context.startActivity(Intent.createChooser(i, "Compartir $name"))
     }
+    val share: (ExportResultUi) -> Unit = { res -> shareFile(res.file, res.output.mime, res.suggestedName) }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = Bg, contentWindowInsets = WindowInsets(0)) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
@@ -84,6 +88,8 @@ fun AppRoot(vm: AppViewModel) {
                     }
                 }
             }
+            vm.batchConfirm?.let { c -> BatchConfirmDialog(c, vm.batchFormat, onYes = { vm.confirmBatch() }, onNo = { vm.batchConfirm = null }) }
+            if (vm.batchUi != null) BatchDialog(vm, shareFile)
             vm.exportResult?.let { res -> ExportResultDialog(res, onSave = { vm.pendingSave = res }, onShare = { share(res) }, onDismiss = { vm.exportResult = null }) }
         }
     }

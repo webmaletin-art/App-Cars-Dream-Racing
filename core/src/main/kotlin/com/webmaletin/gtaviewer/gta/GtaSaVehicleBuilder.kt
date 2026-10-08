@@ -202,7 +202,11 @@ class GtaSaVehicleBuilder(
             val frame = doc.frames.getOrNull(a.frameIndex)
             if (frame == null) acc.warnings += "Atomic ${a.index} referencia el frame ${a.frameIndex}, que no existe; se usa identidad"
             meshCounter++
-            val cls = PartClassifier.classify(frame?.name)
+            var cls = PartClassifier.classify(frame?.name)
+            if (cls.category == PartCategory.OTHER) {
+                val byTex = PartClassifier.classifyByTextures(subs.mapNotNull { it.second.textureName })
+                if (byTex != null) cls = PartClassifier.Result(byTex, null, false, cls.variant)
+            }
             val name = uniqueName(frame?.name ?: "Mesh %03d".format(meshCounter))
             val pid = ids.part++
             val visible = cls.variant == null && (a.isRendered || !anyRendered)

@@ -40,6 +40,25 @@ Requisitos: JDK 17+, Android SDK 34 (`local.properties` con `sdk.dir`).
 6. **MODO MANUAL** (siempre disponible): elige cualquier DFF y cualquier TXD (del ZIP navegando carpetas, o del dispositivo), o «Cargar DFF sin TXD».
 7. **Diagnóstico**: contadores del ZIP, DFF/TXD válidos, materiales/texturas encontradas y faltantes, errores de chunks, parser usado, log copiable.
 
+## Flujo «preparar para mi juego» (Outliner + exportación masiva)
+
+1. **Outliner** (botón OUTLINER del visor, panel lateral estilo Blender): lista *todas* las partes del DFF (10, 35… las que haya; sin nombre → `Mesh 001…`).
+   Nombres propuestos por frame/textura (rueda, puerta, capó, baúl, cristales, luces, motor, escape, paragolpes, spoiler, interior, frenos, suspensión…); el usuario puede
+   **reclasificar cualquier parte** (menú ⋮) y la propuesta nunca se aplica sin que se vea («propuesto»/«manual»).
+2. **Casilla = visibilidad = exportación.** Hay una única fuente de verdad (`EditSession`): lo visible en el visor es exactamente lo que se exporta (GLB/OBJ/FBX, individual o masivo). No existe una segunda lista.
+   Desmarcar no destruye nada (se puede volver a marcar). Casillas tri-estado en grupos y partes con varios materiales; contadores permanentes «Partes visibles: 10 / 14 · Meshes visibles: 27 / 32».
+3. **Árbol real o lista plana**: solo se agrupa si hay información (al menos dos categorías distintas); si no, lista plana. Las partes sin clasificar quedan sueltas, sin grupos inventados.
+4. **Tocar una pieza en el visor** la resalta, selecciona su fila en el Outliner (se desplaza hasta ella) y muestra malla/material/textura/vértices/triángulos.
+5. Botones: Mostrar todo · Ocultar todo · Invertir · Restaurar original · Seleccionar todos · Deseleccionar todos · Solo selección · **PREPARAR PARA MI JUEGO** · **MARCAR COMO LISTO** · EXPORTAR ESTE VEHÍCULO · RESTABLECER VEHÍCULO.
+   *Preparar* parte de la visibilidad original y desmarca las ruedas (opcionalmente suspensión, frenos, otras piezas; ver «Preparación para mi juego» en el catálogo). No toca DFF/TXD/ZIP.
+6. **Estados por vehículo**: ○ SIN REVISAR · ◐ EDITADO · ✓ LISTO PARA EXPORTAR · ✕ ERROR. Cada vehículo guarda **su propia configuración** en memoria (mientras el ZIP siga abierto) y la recupera al reabrirlo.
+   Editar un vehículo «listo» lo devuelve a EDITADO.
+7. **Catálogo masivo**: casillas, buscar, filtros (Todos/Compatibles/Con TXD/Sin TXD/Con errores/Seleccionados/Listos), seleccionar todos/ninguno/invertir/compatibles, contador.
+   **EXPORTAR SELECCIONADOS** y **EXPORTAR TODOS LOS COMPATIBLES** procesan los vehículos **uno por uno** (cargar DFF+TXD → configuración propia → visibilidad → exportar → liberar) y escriben en streaming
+   `VEHICULOS_GLB.zip` (o `_OBJ`/`_FBX`, una carpeta por vehículo) con solo los archivos correctos y nombres humanos (`Audi_A3.glb`, `BMW_M4_GTS.glb`…). Un fallo no cancela el resto y se informa (`✕ Golf GTI — TXD incompatible`).
+   Los vehículos SIN REVISAR se exportan con todas sus partes (la app lo avisa antes de empezar). La configuración global nunca se aplica por encima de la individual.
+8. **Modo manual**: el vehículo cargado entra al catálogo como un elemento más (mismo visor, Outliner, estados, exportación individual y masiva).
+
 ## Arquitectura
 
 ```

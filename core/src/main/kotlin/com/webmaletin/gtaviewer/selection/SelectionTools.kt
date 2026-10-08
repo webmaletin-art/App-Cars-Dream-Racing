@@ -26,8 +26,8 @@ object SelectionTools {
     fun byTexture(model: VehicleModel, textureName: String): Set<Int> =
         model.subMeshes.filter { it.material.textureName.equals(textureName, true) }.map { it.id }.toSet()
 
-    fun byCategory(model: VehicleModel, category: PartCategory): Set<Int> =
-        model.parts.filter { it.category == category }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
+    fun byCategory(model: VehicleModel, category: PartCategory, categoryOf: (MeshPart) -> PartCategory = { it.category }): Set<Int> =
+        model.parts.filter { categoryOf(it) == category }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
 
     fun byWheelSlot(model: VehicleModel, slot: WheelSlot): Set<Int> =
         model.parts.filter { it.wheelSlot == slot }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
@@ -56,8 +56,8 @@ object SelectionTools {
     private fun signature(p: MeshPart): Set<String> = p.subMeshes.map { it.material.key }.toSet()
 
     /** Piezas agrupadas para el árbol (solo categorías con contenido, en orden fijo). */
-    fun groupedParts(model: VehicleModel): List<Pair<PartCategory, List<MeshPart>>> =
-        model.parts.groupBy { it.category }.toList().sortedBy { it.first.order }.map { (c, l) ->
+    fun groupedParts(model: VehicleModel, categoryOf: (MeshPart) -> PartCategory = { it.category }): List<Pair<PartCategory, List<MeshPart>>> =
+        model.parts.groupBy { categoryOf(it) }.toList().sortedBy { it.first.order }.map { (c, l) ->
             c to l.sortedWith(compareBy({ it.wheelSlot?.ordinal ?: 99 }, { it.name.lowercase() }))
         }
 }

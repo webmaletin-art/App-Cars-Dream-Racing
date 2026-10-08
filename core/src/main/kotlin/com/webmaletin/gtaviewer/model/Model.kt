@@ -6,7 +6,7 @@ enum class PartCategory(val label: String, val order: Int) {
     BODY("Carrocería", 0), INTERIOR("Interior", 1), WHEEL("Ruedas", 2), DOOR("Puertas", 3), HOOD("Capó", 4),
     TRUNK("Baúl", 5), ENGINE("Motor", 6), EXHAUST("Escape", 7), LIGHT("Luces", 8), WINDOW("Cristales", 9),
     BUMPER("Paragolpes", 10), SPOILER("Spoiler", 11), MIRROR("Espejos", 12), FENDER("Guardabarros", 13),
-    SUSPENSION("Suspensión", 14), OTHER("Otros", 15),
+    BRAKES("Frenos", 14), SUSPENSION("Suspensión", 15), OTHER("Otros", 16),
 }
 
 enum class WheelSlot(val label: String, val short: String) {
