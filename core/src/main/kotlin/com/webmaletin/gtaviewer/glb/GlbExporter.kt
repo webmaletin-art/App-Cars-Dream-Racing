@@ -61,7 +61,7 @@ class GlbExporter : SceneExporter {
             if (i > 0) materials.append(',')
             materials.append("{\"name\":${q(m.name)},\"pbrMetallicRoughness\":{\"baseColorFactor\":[${Num.f(m.r)},${Num.f(m.g)},${Num.f(m.b)},${Num.f(m.a)}]")
             m.texture?.let { materials.append(",\"baseColorTexture\":{\"index\":${texIndex[it]}}") }
-            materials.append(",\"metallicFactor\":0,\"roughnessFactor\":0.75},\"doubleSided\":true")
+            materials.append(",\"metallicFactor\":${Num.f(m.metallic)},\"roughnessFactor\":${Num.f(m.roughness)}},\"doubleSided\":true")
             materials.append(",\"alphaMode\":\"${if (m.transparent) "BLEND" else "OPAQUE"}\"}")
             matIndex[m] = i
         }

@@ -29,7 +29,12 @@ object PartNaming {
             "wing" in n || "fender" in n -> "Guardabarros " + (side(n) ?: "")
             "windscreen" in n || "windshield" in n -> "Parabrisas"
             "exhaust" in n -> "Escape"
-            "spoiler" in n -> "Spoiler"
+            "spoiler" in n || n.startsWith("spl_") -> "Spoiler"
+            n.startsWith("fbmp") -> "Paragolpes delantero"
+            n.startsWith("rbmp") -> "Paragolpes trasero"
+            n.startsWith("exh") -> "Escape"
+            n.startsWith("rf_") -> "Techo"
+            Regex("^wg_[lr]").containsMatchIn(n) -> "Faldón " + (if (n.startsWith("wg_l")) "izquierdo" else "derecho")
             else -> null
         }
         // Si el nombre ya contiene un sufijo de la extra "Rueda FL" (nombre único generado), se respeta.

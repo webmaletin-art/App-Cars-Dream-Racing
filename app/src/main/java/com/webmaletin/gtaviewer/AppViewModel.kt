@@ -490,6 +490,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             PartCategory.SUSPENSION -> "suspension"; PartCategory.BRAKES -> "frenos"; PartCategory.LIGHT -> "luces"
             PartCategory.WINDOW -> "cristales"; PartCategory.FENDER -> "guardabarros"; PartCategory.BODY -> "carroceria"
             PartCategory.OTHER -> "piezas"
+            else -> cats[0].label.lowercase()
         }
         return "seleccion"
     }

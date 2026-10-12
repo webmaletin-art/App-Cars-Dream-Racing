@@ -18,6 +18,8 @@ class ExportMaterial(
     val r: Float, val g: Float, val b: Float, val a: Float,
     val texture: ExportTexture?,
     val transparent: Boolean,
+    val metallic: Float = 0f,
+    val roughness: Float = 0.75f,
 )
 
 /** Malla lista para escribir: posiciones/normales ya en espacio de exportación (Y arriba, frente +Z), vértices compactados. */
@@ -71,13 +73,13 @@ object ExportSceneBuilder {
 
         fun materialFor(mi: MaterialInfo): ExportMaterial {
             val painted = paint.colorFor(mi.paintSlot)
-            val key = mi.key + "|" + (painted ?: -1)
+            val key = mi.key + "|" + (painted ?: -1) + "|" + mi.metallic + "|" + mi.roughness + "|" + mi.a
             return materials.getOrPut(key) {
                 val (r, g, b) = if (painted != null) Triple((painted shr 16) and 255, (painted shr 8) and 255, painted and 255) else Triple(mi.r, mi.g, mi.b)
                 val tex = textureFor(mi)
                 var nm = sanitize(mi.name)
                 if (materials.values.any { it.name == nm }) nm += "_" + (materials.size + 1)
-                ExportMaterial(nm, r / 255f, g / 255f, b / 255f, mi.a / 255f, tex, mi.transparent)
+                ExportMaterial(nm, r / 255f, g / 255f, b / 255f, mi.a / 255f, tex, mi.transparent, mi.metallic, mi.roughness)
             }
         }
 

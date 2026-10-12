@@ -6,7 +6,8 @@ import com.webmaletin.gtaviewer.model.VehicleModel
 import kotlin.math.abs
 
 class Ray(val origin: FloatArray, val dir: FloatArray)
-class Hit(val subMeshId: Int, val distance: Float)
+/** [triangle] = índice del triángulo dentro del sub-mesh tocado (-1 si no se calculó). */
+class Hit(val subMeshId: Int, val distance: Float, val triangle: Int = -1)
 
 /** Picking por rayo contra los triángulos reales (sin buffers de color), en espacio de visor. */
 object RayPicker {
@@ -23,19 +24,22 @@ object RayPicker {
             Mat4.transformDir(inv, ray.dir[0], ray.dir[1], ray.dir[2], d)
             for (sm in part.subMeshes) {
                 if (!isVisible(sm)) continue
-                val t = intersect(sm, o, d) ?: continue
-                if (best == null || t < best.distance) best = Hit(sm.id, t)
+                val (t, tri) = intersectTri(sm, o, d) ?: continue
+                if (best == null || t < best.distance) best = Hit(sm.id, t, tri)
             }
         }
         return best
     }
 
     /** Möller–Trumbore a dos caras. Devuelve t (en unidades del parámetro del rayo, igual en espacio local y de visor). */
-    fun intersect(sm: SubMesh, o: FloatArray, d: FloatArray): Float? {
+    fun intersect(sm: SubMesh, o: FloatArray, d: FloatArray): Float? = intersectTri(sm, o, d)?.first
+
+    fun intersectTri(sm: SubMesh, o: FloatArray, d: FloatArray): Pair<Float, Int>? {
         val p = sm.geometry.positions
         val idx = sm.indices
         var best = Float.MAX_VALUE
         var found = false
+        var bestTri = -1
         var i = 0
         while (i + 2 < idx.size) {
             val a = idx[i] * 3; val b = idx[i + 1] * 3; val c = idx[i + 2] * 3
@@ -53,8 +57,8 @@ object RayPicker {
             val v = (d[0] * qx + d[1] * qy + d[2] * qz) * inv
             if (v < 0f || u + v > 1f) continue
             val t = (e2x * qx + e2y * qy + e2z * qz) * inv
-            if (t > 1e-5f && t < best) { best = t; found = true }
+            if (t > 1e-5f && t < best) { best = t; found = true; bestTri = i / 3 - 1 }
         }
-        return if (found) best else null
+        return if (found) best to bestTri else null
     }
 }

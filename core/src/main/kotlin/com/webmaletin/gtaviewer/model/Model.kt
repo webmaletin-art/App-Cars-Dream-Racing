@@ -3,10 +3,15 @@ package com.webmaletin.gtaviewer.model
 import com.webmaletin.gtaviewer.txd.TextureImage
 
 enum class PartCategory(val label: String, val order: Int) {
-    BODY("Carrocería", 0), INTERIOR("Interior", 1), WHEEL("Ruedas", 2), DOOR("Puertas", 3), HOOD("Capó", 4),
-    TRUNK("Baúl", 5), ENGINE("Motor", 6), EXHAUST("Escape", 7), LIGHT("Luces", 8), WINDOW("Cristales", 9),
-    BUMPER("Paragolpes", 10), SPOILER("Spoiler", 11), MIRROR("Espejos", 12), FENDER("Guardabarros", 13),
-    BRAKES("Frenos", 14), SUSPENSION("Suspensión", 15), OTHER("Otros", 16),
+    BODY("Carrocería", 0), ROOF("Techo", 1), HOOD("Capó", 2), TRUNK("Baúl / portón", 3), DOOR("Puertas", 4), FENDER("Guardabarros", 5),
+    BUMPER("Paragolpes", 6), SKIRT("Faldones", 7), SPOILER("Spoiler / alerón", 8), GRILLE("Parrilla", 9), INTAKE("Tomas de aire", 10),
+    LIGHT("Faros y luces", 11), MIRROR("Espejos", 12), WINDOW("Cristales", 13), WHEEL("Ruedas y neumáticos", 14), BRAKES("Frenos", 15),
+    SUSPENSION("Suspensión", 16), ENGINE("Motor", 17), EXHAUST("Escape", 18), INTERIOR("Interior", 19), SEAT("Asientos", 20),
+    STEERING("Volante", 21), OTHER("Otros", 22);
+
+    companion object {
+        fun fromName(n: String): PartCategory? = values().firstOrNull { it.name == n }
+    }
 }
 
 enum class WheelSlot(val label: String, val short: String) {
@@ -37,6 +42,11 @@ class MaterialInfo(
     /** 0 = ninguno; 1 = color primario; 2 = color secundario (marcadores de pintura de SA). */
     val paintSlot: Int,
     val hasEnvMap: Boolean,
+    /** PBR (glTF): se exportan tal cual; el visor los usa para el brillo. */
+    val metallic: Float = 0f,
+    val roughness: Float = 0.75f,
+    /** Material de cristal (editable de forma independiente de la pintura). */
+    val glass: Boolean = false,
 ) {
     val textureMissing: Boolean get() = textureName != null && texture == null
     val transparent: Boolean get() = a < 255 || texture?.hasAlpha == true

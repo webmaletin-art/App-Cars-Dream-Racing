@@ -66,9 +66,9 @@ object WheelOrientation {
             return sqrt(x * x + y * y)
         }
 
-        var posW = 0; var negW = 0
+        var posW = 0.0; var negW = 0.0
         val cues = ArrayList<String>()
-        fun vote(name: String, signedScore: Int, weight: Int, detail: String) {
+        fun vote(name: String, signedScore: Int, weight: Double, detail: String) {
             if (signedScore > 0) posW += weight else if (signedScore < 0) negW += weight
             cues += "$name: ${if (signedScore > 0) "+" else if (signedScore < 0) "-" else "0"}$detail"
         }
@@ -89,7 +89,7 @@ object WheelOrientation {
         }
         if (rim.size >= 12 && inner.size >= 12) {
             val d = (rimSum / rim.size - innerSum / inner.size).toFloat()
-            if (abs(d) >= 0.1f * half) vote("materiales(llanta vs freno/sombra)", if (d > 0) 1 else -1, 2, " Δ=%.3f".format(d))
+            if (abs(d) >= 0.1f * half) vote("materiales(llanta vs freno/sombra)", if (d > 0) 1 else -1, 2.0, " Δ=%.3f".format(d))
         }
 
         // --- señales geométricas sobre triángulos (sin nombres)
@@ -116,16 +116,18 @@ object WheelOrientation {
         }
         if (nIn >= 8) {
             val m = (sumAx / nIn).toFloat()
-            if (abs(m) >= 0.12f * half) vote("media axial del interior de la rueda", if (m > 0) 1 else -1, 1, " m=%.3f".format(m))
+            if (abs(m) >= 0.12f * half) vote("media axial del interior de la rueda", if (m > 0) 1 else -1, 1.5, " m=%.3f".format(m))
         }
         val best = bins.indices.maxByOrNull { bins[it] }!!
         if (bins[best] >= 8) {
             val c = (binSum[best] / bins[best]).toFloat()
-            if (abs(c) >= 0.4f * half) vote("plano dominante perpendicular al eje", if (c > 0) 1 else -1, 1, " x=%.3f (%d tri)".format(c, bins[best]))
+            if (abs(c) >= 0.4f * half) vote("plano dominante perpendicular al eje", if (c > 0) 1 else -1, 0.75, " x=%.3f (%d tri)".format(c, bins[best]))
         }
 
+        // Pesos según validación con 15 ruedas reales de GTA SA: la media axial acertó siempre; el plano dominante falló
+        // cuando una placa de freno trasera con muchos triángulos domina el histograma, por eso pesa menos.
         val win = max(posW, negW); val lose = min(posW, negW)
-        if (win < 2 || lose * 2 > win) return Outcome(null, "señales insuficientes o contradictorias (${cues.joinToString("; ").ifEmpty { "ninguna" }})")
+        if (win < 1.5 || lose * 2 > win) return Outcome(null, "señales insuficientes o contradictorias (${cues.joinToString("; ").ifEmpty { "ninguna" }})")
         return Outcome(Analysis(axis, if (posW > negW) 1 else -1, center, cues), "ok")
     }
 

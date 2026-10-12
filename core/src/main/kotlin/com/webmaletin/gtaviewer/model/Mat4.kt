@@ -72,6 +72,12 @@ object Mat4 {
         return r
     }
 
+    fun translate(x: Float, y: Float, z: Float): FloatArray = identity().also { it[12] = x; it[13] = y; it[14] = z }
+    fun scale3(x: Float, y: Float, z: Float): FloatArray = floatArrayOf(x, 0f, 0f, 0f, 0f, y, 0f, 0f, 0f, 0f, z, 0f, 0f, 0f, 0f, 1f)
+    fun rotX(deg: Float): FloatArray { val r = Math.toRadians(deg.toDouble()); val c = Math.cos(r).toFloat(); val s = Math.sin(r).toFloat(); return floatArrayOf(1f, 0f, 0f, 0f, 0f, c, s, 0f, 0f, -s, c, 0f, 0f, 0f, 0f, 1f) }
+    fun rotY(deg: Float): FloatArray { val r = Math.toRadians(deg.toDouble()); val c = Math.cos(r).toFloat(); val s = Math.sin(r).toFloat(); return floatArrayOf(c, 0f, -s, 0f, 0f, 1f, 0f, 0f, s, 0f, c, 0f, 0f, 0f, 0f, 1f) }
+    fun rotZ(deg: Float): FloatArray { val r = Math.toRadians(deg.toDouble()); val c = Math.cos(r).toFloat(); val s = Math.sin(r).toFloat(); return floatArrayOf(c, s, 0f, 0f, -s, c, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f) }
+
     fun scale(s: Float): FloatArray = floatArrayOf(s, 0f, 0f, 0f, 0f, s, 0f, 0f, 0f, 0f, s, 0f, 0f, 0f, 0f, 1f)
 
     fun isFinite(m: FloatArray): Boolean = m.all { it.isFinite() }

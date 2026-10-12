@@ -67,6 +67,8 @@ object TxdMatcher {
 
 /** Decide si un DFF es un vehículo completo o una pieza (ruedas, puertas, tuning...). */
 object DffClassifier {
+    private val TUNING_FILE = Regex("^(exh|fbmp|rbmp|spl|rf|wg|bnt|bnts|lgt|nto|bbb|fbb|rbb|sskirt|bmp)(_[a-z0-9]+)+$")
+
     fun classify(entry: ArchiveEntry, summary: com.webmaletin.gtaviewer.dff.DffSummary?): DffClassification {
         var vehicle = 0; var part = 0
         val reasons = ArrayList<String>()
@@ -79,10 +81,12 @@ object DffClassifier {
         if (dummies >= 2) { vehicle += 3; reasons += "$dummies frames de vehículo (ruedas/puertas...)" }
         if ((summary?.geometryCount ?: 0) >= 3) vehicle += 1
 
+        // Convención de las piezas de tuning de GTA SA: fbmp_/rbmp_/exh_/spl_/rf_/wg_l|r_/bnt_… (p. ej. "fbmp_a_vwg.dff")
+        if (TUNING_FILE.containsMatchIn(entry.baseName.lowercase())) { part += 4; reasons += "nombre de pieza de tuning de GTA SA (${entry.baseName})" }
         val fileKw = Names.partKeyword(entry.baseName)
         if (fileKw != null) { part += 3; reasons += "nombre de archivo contiene '$fileKw'" }
         val folderKw = if (entry.dir.isEmpty()) null else Names.partKeyword(entry.dir.substringAfterLast('/'))
-        if (folderKw != null) { part += 1; reasons += "carpeta contiene '$folderKw'" }
+        if (folderKw != null) { part += if (folderKw in setOf("parts", "part", "tuning")) 2 else 1; reasons += "carpeta contiene '$folderKw'" }
         if (summary != null && summary.valid && summary.geometryCount == 1 && frames.none { it.startsWith("chassis") }) part += 1
 
         val kind = if (vehicle >= 5) DffKind.VEHICLE else if (part >= 3) DffKind.PART else DffKind.VEHICLE

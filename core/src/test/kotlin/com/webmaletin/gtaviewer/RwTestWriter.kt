@@ -181,6 +181,46 @@ object RwTestWriter {
         return dff(frames, geoms, atomics)
     }
 
+    /** Vehículo sintético escalable con chassis (2 materiales), 4 ruedas (plantilla asimétrica), 2 puertas, capó, paragolpes y variante dañada. */
+    fun scaledVehicleDff(k: Float = 1f, wheelOuterSign: Int = 1, wheelK: Float = k): ByteArray {
+        val body = TestMaterial(60, 255, 0, 255, "body"); val glass = TestMaterial(200, 220, 255, 120, "glass"); val tyre = TestMaterial(255, 255, 255, 255, "tyre")
+        val frames = listOf(
+            TestFrame(null, -1), TestFrame("chassis", 0), TestFrame("wheel", 0),
+            TestFrame("wheel_lf_dummy", 0, floatArrayOf(-0.9f * k, 1.4f * k, -0.3f * k)), TestFrame("wheel_rf_dummy", 0, floatArrayOf(0.9f * k, 1.4f * k, -0.3f * k)),
+            TestFrame("wheel_lb_dummy", 0, floatArrayOf(-0.9f * k, -1.4f * k, -0.3f * k)), TestFrame("wheel_rb_dummy", 0, floatArrayOf(0.9f * k, -1.4f * k, -0.3f * k)),
+            TestFrame("door_lf_dummy", 0, floatArrayOf(-0.9f * k, 0.3f * k, 0.3f * k)), TestFrame("door_rf_dummy", 0, floatArrayOf(0.9f * k, 0.3f * k, 0.3f * k)),
+            TestFrame("bonnet_dummy", 0, floatArrayOf(0f, 1.5f * k, 0.6f * k)), TestFrame("bump_front_dummy", 0, floatArrayOf(0f, 2.15f * k, -0.2f * k)),
+            TestFrame("bump_rear_dummy", 0, floatArrayOf(0f, -2.15f * k, -0.2f * k)), TestFrame("chassis_dam", 0),
+        )
+        val geoms = listOf(
+            box(0f, 0f, 0f, 1.8f * k, 4.2f * k, 1.0f * k, listOf(body, glass)),
+            asymmetricWheel(wheelOuterSign, wheelK),
+            box(0f, 0f, 0f, 0.1f * k, 1.0f * k, 0.8f * k, listOf(body)),
+            box(0f, 0f, 0f, 1.6f * k, 1.0f * k, 0.1f * k, listOf(body)),
+            box(0f, 0f, 0f, 1.7f * k, 0.3f * k, 0.5f * k, listOf(body)),
+            box(0f, 0f, 0f, 1.8f * k, 4.2f * k, 1.0f * k, listOf(body)),
+        )
+        val atomics = listOf(TestAtomic(1, 0), TestAtomic(2, 1), TestAtomic(7, 2), TestAtomic(8, 2), TestAtomic(9, 3), TestAtomic(10, 4), TestAtomic(11, 4), TestAtomic(12, 5))
+        return dff(frames, geoms, atomics)
+    }
+
+    /** Rueda de revolución con el exterior (llanta) en el lado [outerSign] del eje X y el freno en el interior. */
+    fun asymmetricWheel(outerSign: Int, k: Float = 1f): TestGeometry {
+        val H = 0.1f * k; val R = 0.4f * k
+        val pos = ArrayList<Float>(); val tris = ArrayList<Int>(); val mats = ArrayList<Int>()
+        fun v(x: Float, y: Float, z: Float): Int { pos += x; pos += y; pos += z; return pos.size / 3 - 1 }
+        val n = 24
+        val ring = IntArray(2 * n)
+        for (i in 0 until n) { val a = 2 * Math.PI * i / n; ring[i] = v(-H, R * Math.cos(a).toFloat(), R * Math.sin(a).toFloat()); ring[n + i] = v(H, R * Math.cos(a).toFloat(), R * Math.sin(a).toFloat()) }
+        for (i in 0 until n) { val i2 = (i + 1) % n; tris += listOf(ring[i], ring[n + i], ring[i2]); mats += 0; tris += listOf(ring[i2], ring[n + i], ring[n + i2]); mats += 0 }
+        fun disc(x: Float, r: Float, segs: Int, mat: Int, up: Boolean) {
+            val c = v(x, 0f, 0f); val rim = IntArray(segs) { i -> val a = 2 * Math.PI * i / segs; v(x, r * Math.cos(a).toFloat(), r * Math.sin(a).toFloat()) }
+            for (i in 0 until segs) { val i2 = (i + 1) % segs; if (up) tris += listOf(c, rim[i], rim[i2]) else tris += listOf(c, rim[i2], rim[i]); mats += mat }
+        }
+        disc(outerSign * 0.9f * H, 0.32f * k, 48, 1, outerSign > 0); disc(-outerSign * 0.2f * H, 0.25f * k, 24, 2, outerSign < 0)
+        return TestGeometry(pos.toFloatArray(), tris.toIntArray(), mats.toIntArray(), listOf(TestMaterial(204, 204, 204, 255, "pzero"), TestMaterial(255, 255, 255, 255, "wheel"), TestMaterial(180, 180, 180, 255, "brakerotor")), null)
+    }
+
     // ------------------------------------------------------------------ TXD
 
     class TestTexture(val name: String, val w: Int, val h: Int, val d3dFormat: Int, val data: ByteArray, val alpha: Boolean = false,

@@ -6,9 +6,20 @@ class TextureImage(
     val width: Int,
     val height: Int,
     val rgba: ByteArray,
-    val hasAlpha: Boolean,
+    hasAlpha: Boolean,
     val sourceFormat: String,
-)
+) {
+    var hasAlpha: Boolean = hasAlpha
+        private set
+
+    /** Se incrementa cada vez que el editor modifica los píxeles (el visor vuelve a subir la textura a la GPU). */
+    @Volatile var version: Int = 0
+        private set
+
+    fun markChanged() { version++; hasAlpha = com.webmaletin.gtaviewer.txd.TextureDecoder.hasTransparency(rgba) }
+
+    fun copy(newName: String = name): TextureImage = TextureImage(newName, width, height, rgba.copyOf(), hasAlpha, sourceFormat)
+}
 
 class TxdTexture(
     val name: String,
