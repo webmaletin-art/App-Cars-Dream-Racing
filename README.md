@@ -1,4 +1,53 @@
-# GTA Vehicle Viewer
+# GTA Car Lab
+
+App Android nativa (Kotlin + Jetpack Compose + OpenGL ES 3.0), **GTA San Andreas**, con la arquitectura lista para otros juegos (`FormatModule`).
+Dos módulos independientes que comparten el mismo motor (`:core`, Kotlin puro y testeado):
+
+| Entrada del menú | Módulo | Qué hace |
+|---|---|---|
+| **VISOR Y CONVERSOR** | A | Importa ZIP, empareja DFF/TXD, 3D, Outliner, exporta GLB/OBJ/FBX (individual y masivo). *Todo lo anterior se conserva.* |
+| **GENERADOR DE AUTOS** | B | Genera alternativas desde el catálogo (tipo, estilo, nivel de modificación, pintura, ruedas, interior, emblemas), con vista previa renderizada y revisión de solapes sobre las mallas. Se pueden bloquear piezas y regenerar. |
+| **CATÁLOGO** | B | Biblioteca **permanente** (sobrevive a reinicios y a actualizaciones): vehículos y piezas con id, categoría, medidas, origen, materiales, texturas y compatibilidad. Búsqueda, filtros, orden, miniaturas progresivas, favoritos, categorías propias, renombrar, eliminar (con confirmación), detección de duplicados por huella (re-importar no duplica), copia de seguridad exportable/importable. |
+| **EDITOR DE TEXTURAS** | B | Pincel, borrador, restaurar original, línea/rectángulo/elipse, relleno, cuentagotas, sello/logo (PNG/JPG), texto, «quitar logo» (rellena solo la zona), capas con opacidad, deshacer/rehacer por teselas, mapa UV superpuesto y edición básica de islas. Los cambios se guardan **en los píxeles** de una copia de la textura del proyecto. |
+| **PROYECTOS** | B | Taller de ensamblaje con guardado automático (reabre tras reiniciar y avisa de recursos que falten). |
+| **CONFIGURACIÓN** | — | Almacenamiento, limpieza, copia de seguridad, perfil de exportación por defecto, límites conocidos. |
+
+## Módulo B en detalle
+
+* **Taller**: la carrocería base se carga **bloqueada** (es la referencia y nunca se deforma sola). Cada pieza tiene posición/rotación/escala (campos numéricos, botones ±, o arrastrando con el dedo en el visor), restablecer, duplicar, copia en espejo, sustituir.
+  Estados **independientes**: 👁 visible ≠ EXP exportar ≠ eliminada; además bloqueo, selección, renombrar, enfocar cámara, deshacer/recuperar y un resumen de lo incluido/omitido en la exportación.
+* **Compatibilidad** (Compatible / con ajustes / dudosa / incompatible): se calcula por razón de escalas, residuos de posición, zona de la pieza y familia de vehículo, con los motivos a la vista; nunca solo por el nombre. Siempre se puede probar una pieza (con aviso). «Guardar ajuste» enseña al motor para próximos proyectos con la misma base.
+* **Ruedas**: la orientación de cada rueda sale de la geometría (cara exterior hacia fuera, sin espejos).
+* **Clasificación de tipo** (multi-etiqueta con confianza): medidas, ruedas/ejes, puertas, nombres y similitud con vehículos ya corregidos. Sus correcciones se guardan y se aprenden.
+* **Separación de piezas**: por objetos del DFF, sub-meshes/materiales, componentes conexos y regiones de caras (selección manual de caras si hay dudas).
+* **Logos/marcas**: ocultar/excluir, borrar caras (con vista previa en rojo y deshacer), limpiar la textura solo en la zona, reemplazar. La búsqueda por palabras clave ayuda a localizar, **no promete detección automática**.
+* **AJUSTAR Y FUSIONAR**: ajustar a la base · combinar mallas · fusionar superficies (soldadura por posición+UV y normales unificadas) · coser bordes · analizar (caras duplicadas/degeneradas/invertidas, aristas abiertas, agujeros) · reparar **validado** (solo se aplica si re-analizar confirma la mejora). **No es una unión booleana de volúmenes.** Todo se hace sobre copias: lo original se conserva.
+* **Materiales**: color, metálico, rugosidad, opacidad, vidrio independiente de la pintura, material «ninguno» (solo color), biblioteca de materiales (cromo, aluminio, goma…), variantes de pintura. Se exportan como PBR en el GLB.
+* **Exportación Godot**: alcance (completo / carrocería / sin ruedas / sin interior / selección / componentes separados), perfiles (Godot 4: frente −Z, origen en suelo/centro, ruedas como nodos independientes; o glTF estándar) editables y guardables, y **re-importación y verificación del GLB** tras exportar.
+
+## Dónde está el código
+
+`core/src/main/kotlin/com/webmaletin/gtaviewer/`: `library/` (catálogo en disco, deduplicado por SHA-1) · `classify/` · `mesh/` (análisis, reparación, fusión) · `texture/` (PaintDocument, PNG) · `uv/` · `fit/` (compatibilidad y generador) · `project/` (formato de proyecto editable) · `export/ExportProfile.kt` · `glb/GlbImporter.kt` (verificación).
+`app/src/main/java/com/webmaletin/gtaviewer/`: `LabViewModel.kt` (Módulo B) · `ui/{Menu,Library,Generator,Workshop*,Texture,Projects,Settings}Screen.kt`.
+
+## Pruebas
+
+```
+./gradlew :core:test                 # núcleo: parsers, wheel orientation, catálogo, mallas, texturas, proyectos, generador, GLB
+./gradlew :app:testDebugUnitTest     # interfaz Compose sobre Robolectric (JVM): cada pantalla compone, gestos táctiles pintan, el taller opera
+```
+`RealPacksTest` recorre el flujo completo con packs reales si existe `GTA_REAL_ZIPS` (o `/tmp/claude-0/zips`): importar → reabrir → generar → proyecto → GLB Godot → verificar.
+Robolectric descarga su jar de Android desde Maven; sin red se puede precargar y apuntar `ROBOLECTRIC_DIR` a esa carpeta.
+**Límite honesto:** no hay emulador en CI/entorno de desarrollo, así que OpenGL y el aspecto real en un teléfono no están probados automáticamente.
+
+## Descarga
+
+Cada push a `main` publica el APK firmado en la release **latest**: `https://github.com/webmaletin-art/App-Cars-Dream-Racing/releases/latest/download/GTA-Car-Lab.apk`
+(no hay actualizador automático dentro de la app: se descarga ese APK y se instala encima).
+
+---
+
+# Módulo A · Visor y conversor (GTA Vehicle Viewer)
 
 Aplicación Android nativa (Kotlin + Jetpack Compose + OpenGL ES 3.0) para **importar ZIP de vehículos de GTA San Andreas,
 emparejar DFF/TXD automáticamente, verlos en 3D, editar piezas (ruedas, puertas, capó…) y exportar a GLB, OBJ+MTL+texturas y FBX+texturas**.
@@ -17,7 +66,7 @@ Los archivos originales (ZIP/DFF/TXD) nunca se modifican: toda edición ocurre s
   podría firmar «actualizaciones» de esta app**: para uso serio reemplaza `signing/gtaviewer.keystore` por tu clave privada (o define
   `SIGNING_STORE_FILE`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD` como variables de entorno/secrets) y no la publiques.
   Cambiar de clave obliga a desinstalar una vez.
-* CI: `.github/workflows/build.yml` compila y sube los APK como artefactos en cada push a `main`.
+* CI: `.github/workflows/build.yml` ejecuta los tests, compila y publica los APK (artefactos + release `latest`) en cada push a `main`.
 
 ## Compilar y probar
 

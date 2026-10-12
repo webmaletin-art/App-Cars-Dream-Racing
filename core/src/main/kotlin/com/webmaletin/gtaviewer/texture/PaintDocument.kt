@@ -44,7 +44,9 @@ class PaintDocument(val width: Int, val height: Int, base: ByteArray, val name: 
     private val T = 64
     private fun tilesX() = (width + T - 1) / T
 
-    fun begin(label: String) { openTiles = LinkedHashMap(); openLabel = label }
+    private var gestureMask: BooleanArray? = null
+
+    fun begin(label: String) { openTiles = LinkedHashMap(); openLabel = label; gestureMask = null }
 
     private fun touch(layer: Int, x: Int, y: Int) {
         val ot = openTiles ?: return
@@ -60,7 +62,7 @@ class PaintDocument(val width: Int, val height: Int, base: ByteArray, val name: 
 
     fun end() {
         val ot = openTiles ?: return
-        openTiles = null
+        openTiles = null; gestureMask = null
         if (ot.isEmpty()) return
         for (s in ot.values) {
             val l = layers[s.layer]; val x0 = s.tx * T; val y0 = s.ty * T; val w = min(T, width - x0); val h = min(T, height - y0)
@@ -115,16 +117,14 @@ class PaintDocument(val width: Int, val height: Int, base: ByteArray, val name: 
     // ------------------------------------------------------------------ composición
 
     /** Aplana todas las capas visibles (alfa recto, "sobre"). */
-    fun flatten(): ByteArray = flattenRect(0, 0, width, height).let { out ->
-        val full = ByteArray(width * height * 4)
-        for (r in 0 until height) System.arraycopy(out, r * width * 4, full, r * width * 4, width * 4)
-        full
-    }
+    fun flatten(): ByteArray = flattenRegion(0, 0, width, height)
 
-    fun flattenRect(x0: Int, y0: Int, w: Int, h: Int): ByteArray {
-        val out = ByteArray(width * height * 4)
-        val xe = min(width, x0 + w); val ye = min(height, y0 + h)
-        for (y in max(0, y0) until ye) for (x in max(0, x0) until xe) {
+    /** Aplana solo el rectángulo indicado; el resultado mide exactamente (w × h × 4) bytes RGBA (para refrescar la vista sin recomponer todo). */
+    fun flattenRegion(x0: Int, y0: Int, w: Int, h: Int): ByteArray {
+        val xs = max(0, x0); val ys = max(0, y0); val xe = min(width, x0 + w); val ye = min(height, y0 + h)
+        val rw = max(0, xe - xs); val rh = max(0, ye - ys)
+        val out = ByteArray(rw * rh * 4)
+        for (y in ys until ye) for (x in xs until xe) {
             val o = (y * width + x) * 4
             var r = 0f; var g = 0f; var b = 0f; var a = 0f
             for (l in layers) {
@@ -136,7 +136,8 @@ class PaintDocument(val width: Int, val height: Int, base: ByteArray, val name: 
                 if (oa > 0f) { r = (sr * sa + r * a * (1 - sa)) / oa; g = (sg * sa + g * a * (1 - sa)) / oa; b = (sb * sa + b * a * (1 - sa)) / oa }
                 a = oa
             }
-            out[o] = (r * 255f + 0.5f).toInt().toByte(); out[o + 1] = (g * 255f + 0.5f).toInt().toByte(); out[o + 2] = (b * 255f + 0.5f).toInt().toByte(); out[o + 3] = (a * 255f + 0.5f).toInt().toByte()
+            val q = ((y - ys) * rw + (x - xs)) * 4
+            out[q] = (r * 255f + 0.5f).toInt().toByte(); out[q + 1] = (g * 255f + 0.5f).toInt().toByte(); out[q + 2] = (b * 255f + 0.5f).toInt().toByte(); out[q + 3] = (a * 255f + 0.5f).toInt().toByte()
         }
         return out
     }
@@ -200,7 +201,8 @@ class PaintDocument(val width: Int, val height: Int, base: ByteArray, val name: 
     fun stroke(x0: Float, y0: Float, x1: Float, y1: Float, radius: Float, rgb: Int, opacity: Float, hardness: Float, mode: BrushMode = BrushMode.PAINT) {
         val dist = sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0))
         val step = max(1f, radius / 3f); val n = max(1, (dist / step).toInt())
-        val mask = BooleanArray(width * height)
+        // dentro de un gesto (begin..end) la máscara se comparte: los tramos de un mismo trazo no acumulan opacidad al solaparse
+        val mask = if (openTiles != null) (gestureMask ?: BooleanArray(width * height).also { gestureMask = it }) else BooleanArray(width * height)
         for (i in 0..n) { val t = i / n.toFloat(); dab(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius, rgb, opacity, hardness, mode, mask) }
     }
 

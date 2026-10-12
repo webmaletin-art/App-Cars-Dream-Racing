@@ -29,7 +29,7 @@ import com.webmaletin.gtaviewer.catalog.VehicleStatus
 import com.webmaletin.gtaviewer.gl.GlViewerView
 
 @Composable
-fun ViewerScreen(vm: AppViewModel) {
+fun ViewerScreen(vm: AppViewModel, lab: com.webmaletin.gtaviewer.LabViewModel) {
     val model = vm.model ?: return
     var gl by remember { mutableStateOf<GlViewerView?>(null) }
     var showExport by remember { mutableStateOf(false) }
@@ -77,6 +77,7 @@ fun ViewerScreen(vm: AppViewModel) {
                     Text(if (c == null) "" else "Partes visibles: ${c.partsVisible} / ${c.partsTotal} · Meshes visibles: ${c.meshesVisible} / ${c.meshesTotal}", fontSize = 11.sp, color = Accent)
                     vm.currentItem?.let { Text("${it.manual.let { m -> if (m) "Manual · " else "" }}${vm.statusOf(it.id).symbol} ${vm.statusOf(it.id).label}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+                TextButton(onClick = { vm.currentItem?.let { ci -> vm.libraryItemOf(ci)?.let { lab.importItems(listOf(it)); vm.message = "Añadiendo al catálogo permanente…" } ?: run { vm.message = "No se puede añadir este vehículo" } } }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("A CATÁLOGO", fontSize = 11.sp) }
                 TextButton(onClick = { showInfo = true }) { Text("INFO") }
                 TextButton(onClick = { vm.navigate(Screen.DIAGNOSTICS) }) { Text("DIAG.") }
             }

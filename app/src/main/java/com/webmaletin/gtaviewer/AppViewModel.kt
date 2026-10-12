@@ -23,6 +23,7 @@ import com.webmaletin.gtaviewer.io.ExportFiles
 import com.webmaletin.gtaviewer.io.ImportedArchive
 import com.webmaletin.gtaviewer.io.Storage
 import com.webmaletin.gtaviewer.io.UriSource
+import com.webmaletin.gtaviewer.library.LibraryImporter
 import com.webmaletin.gtaviewer.model.*
 import com.webmaletin.gtaviewer.selection.*
 import com.webmaletin.gtaviewer.zip.ArchiveEntry
@@ -32,7 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Screen { HOME, VIEWER, MANUAL, DIAGNOSTICS }
+enum class Screen { MENU, HOME, VIEWER, MANUAL, DIAGNOSTICS, LIBRARY, GENERATOR, WORKSHOP, TEXTURES, PROJECTS, SETTINGS }
 enum class ExportScope { VISIBLE, FULL, SELECTION }
 enum class EditTab { ACTIONS, MATERIALS }
 
@@ -61,7 +62,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
 
     // ---- navegación / importación
-    var screen by mutableStateOf(Screen.HOME); private set
+    var screen by mutableStateOf(Screen.MENU); private set
     var scanProgress by mutableStateOf<ScanProgress?>(null); private set
     var report by mutableStateOf<ScanReport?>(null); private set
     var archiveNames by mutableStateOf<List<String>>(emptyList()); private set
@@ -75,6 +76,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- catálogo (solo referencias y metadatos; la geometría se carga bajo demanda)
     var items by mutableStateOf<List<CatalogItem>>(emptyList()); private set
     private var manualItems = listOf<CatalogItem>()
+    private val manualSrc = HashMap<String, LibraryImporter.Item>()
     var filter by mutableStateOf(CatalogFilter.ALL)
     var selectedIds by mutableStateOf<Set<String>>(emptySet()); private set
     val workflow = mutableStateMapOf<String, WorkflowStatus>()
@@ -134,8 +136,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun navigate(s: Screen) { screen = s }
 
     fun back(): Boolean = when (screen) {
-        Screen.HOME -> false
+        Screen.MENU -> false
         Screen.VIEWER -> { closeVehicle(); true }
+        Screen.HOME, Screen.LIBRARY, Screen.GENERATOR, Screen.PROJECTS, Screen.SETTINGS -> { screen = Screen.MENU; true }
+        Screen.WORKSHOP -> { screen = Screen.PROJECTS; true }
+        Screen.TEXTURES -> { screen = Screen.WORKSHOP; true }
         else -> { screen = if (model != null && screen == Screen.DIAGNOSTICS) Screen.VIEWER else Screen.HOME; true }
     }
 
@@ -146,6 +151,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun rebuildItems() { items = buildItems(report) + manualItems }
+
+    /** Fuente para el catálogo permanente (Módulo B) de un vehículo del visor, incluido el modo manual. */
+    fun libraryItemOf(item: CatalogItem): LibraryImporter.Item? = item.entry?.let(LibraryImporter::itemOf) ?: manualSrc[item.id]
 
     fun statusOf(id: String): WorkflowStatus = workflow[id] ?: WorkflowStatus.UNREVIEWED
 
@@ -467,6 +475,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         log("Modo manual: DFF=${dff.label} TXD=${txd?.label ?: "(ninguno)"}")
         val id = "manual:${dff.label}|${txd?.label ?: "-"}"
         val existing = manualItems.firstOrNull { it.id == id }
+        manualSrc[id] = LibraryImporter.Item(name, "manual", "manual/${dff.label}", dff.source, txd?.source)
         val item = existing ?: CatalogItem(
             id, name, dff.source.displayName, txd?.source?.displayName,
             Compatibility(txd != null, if (txd == null) "TXD faltante" else null), null, true,
@@ -645,7 +654,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ diagnóstico
 
     fun diagnosticsText(): String = buildString {
-        appendLine("=== GTA Vehicle Viewer ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ===")
+        appendLine("=== GTA Car Lab ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ===")
         appendLine("Módulo: ${parser.module.displayName}")
         appendLine("ZIP cargados: ${archiveNames.joinToString().ifEmpty { "ninguno" }}")
         appendLine("Estados: " + WorkflowStatus.values().joinToString { s -> "${s.label}=${items.count { statusOf(it.id) == s }}" })

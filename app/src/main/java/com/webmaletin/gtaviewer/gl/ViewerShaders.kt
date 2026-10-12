@@ -26,6 +26,7 @@ uniform vec4 uColor;
 uniform int uUseTex;
 uniform vec3 uCamPos;
 uniform float uHighlight;
+uniform vec2 uSpec;
 uniform vec3 uHighlightColor;
 in vec3 vN;
 in vec2 vUv;
@@ -43,7 +44,12 @@ void main() {
     float hemi = 0.5 + 0.5 * n.y;
     float light = 0.30 + 0.28 * hemi + 0.62 * max(dot(n, key), 0.0) + 0.22 * max(dot(n, fill), 0.0)
                 + 0.18 * pow(max(dot(n, v), 0.0), 2.0);
-    vec3 c = base.rgb * min(light, 1.25);
+    float metal = clamp(uSpec.x, 0.0, 1.0);
+    float rough = clamp(uSpec.y, 0.04, 1.0);
+    vec3 c = base.rgb * min(light, 1.25) * (1.0 - 0.45 * metal);
+    vec3 hv = normalize(key + v);
+    float spec = pow(max(dot(n, hv), 0.0), mix(8.0, 120.0, 1.0 - rough)) * (0.10 + 0.55 * metal) * (1.0 - rough * 0.7);
+    c += vec3(spec) * mix(vec3(1.0), base.rgb, metal);
     c = mix(c, uHighlightColor, uHighlight);
     fragColor = vec4(c, base.a);
 }

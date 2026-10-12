@@ -232,6 +232,24 @@ class CarProject(val store: LibraryStore, val id: String, initial: ProjectState)
         return null
     }
 
+    private var gestureLabel: String? = null
+
+    /** Gesto continuo (arrastrar con el dedo): UN solo paso de deshacer; los cambios intermedios no generan historial. */
+    fun beginGesture(label: String) {
+        undoS.addLast(state); if (undoS.size > 120) undoS.removeFirst(); redoS.clear(); gestureLabel = label
+    }
+
+    fun liveNudge(ids: Collection<Int>, dPos: FloatArray): String? {
+        lockedCheck(ids)?.let { return it }
+        state = state.copy(parts = state.parts.map { p -> if (p.id in ids) p.copy(trs = p.trs.copy(pos = listOf(p.trs.pos[0] + dPos[0], p.trs.pos[1] + dPos[1], p.trs.pos[2] + dPos[2]))) else p })
+        revision++; return null
+    }
+
+    fun endGesture() {
+        val l = gestureLabel ?: return; gestureLabel = null
+        state = state.copy(modified = System.currentTimeMillis(), history = (state.history + l).takeLast(300))
+    }
+
     fun resetTrs(ids: Collection<Int>): String? { lockedCheck(ids)?.let { return it }; mapParts("restablecer transformación", ids) { it.copy(trs = Trs()) }; return null }
 
     /** Aplica una colocación sugerida (escala controlada + desplazamiento) a una pieza ya añadida. La base nunca se mueve. */
@@ -350,6 +368,27 @@ class CarProject(val store: LibraryStore, val id: String, initial: ProjectState)
         return created.map { it.id }
     }
 
+    /** Región de caras conectadas con ángulo suave a partir de una cara semilla (índice del aplanado de la parte). */
+    fun growFaceRegion(partId: Int, seedFlatTri: Int, angleDeg: Float, sameMaterial: Boolean): Set<Int> {
+        val p = part(partId) ?: return emptySet()
+        return MeshAnalysis.growRegion(flatOf(p), seedFlatTri, angleDeg, sameMaterial)
+    }
+
+    fun faceCount(partId: Int): Int { val p = part(partId) ?: return 0; return decodedOf(p.blob).subs.sumOf { it.indices.size / 3 } }
+
+    /** Triángulos (x,y,z ×3 por cara) en espacio de visor de las caras indicadas, para resaltarlas en pantalla. */
+    fun faceOverlay(partId: Int, flatTris: Collection<Int>, limit: Int = 20000): FloatArray {
+        val p = part(partId) ?: return FloatArray(0)
+        val f = flatOf(p, withTransform = true)
+        val out = FloatArray(minOf(flatTris.size, limit) * 9); var n = 0; val t = FloatArray(3)
+        for (tri in flatTris) {
+            if (n + 9 > out.size) break
+            if (tri < 0 || tri >= f.triCount) continue
+            for (k in 0..2) { val v = f.tris[tri * 3 + k]; Mat4.transformPoint(Mat4.GTA_TO_VIEW, f.pos[v * 3], f.pos[v * 3 + 1], f.pos[v * 3 + 2], t); out[n++] = t[0]; out[n++] = t[1]; out[n++] = t[2] }
+        }
+        return out.copyOf(n)
+    }
+
     fun analyze(partId: Int) = flatOf(part(partId) ?: throw IllegalArgumentException("Pieza inexistente")).let { MeshAnalysis.analyze(it) }
 
     /** Repara una copia y VALIDA (re-analiza). Solo se aplica si la reparación mejora las métricas; devuelve el informe. */
@@ -416,6 +455,14 @@ class CarProject(val store: LibraryStore, val id: String, initial: ProjectState)
         val h = store.putBlob(BlobCodec.encode(mp) { store.putTexture(it) })
         mapParts("editar UV", listOf(partId)) { it.copy(blob = h, origBlob = it.origBlob ?: it.blob, note = "UV editadas (isla $islandIndex)") }
         return null
+    }
+
+    /** Aristas UV de un sub-mesh: (u0,v0,u1,v1,u2,v2) por triángulo, para dibujar el mapa UV sobre la textura. */
+    fun uvWire(partId: Int, subIndex: Int): FloatArray {
+        val p = part(partId) ?: return FloatArray(0); val d = decodedOf(p.blob); val sd = d.subs.getOrNull(subIndex) ?: return FloatArray(0)
+        val g = d.geometries[sd.geometryIndex]; val n = sd.indices.size / 3; val out = FloatArray(n * 6)
+        for (t in 0 until n) for (k in 0..2) { val v = sd.indices[t * 3 + k]; out[t * 6 + k * 2] = g.uvs[v * 2]; out[t * 6 + k * 2 + 1] = g.uvs[v * 2 + 1] }
+        return out
     }
 
     fun uvIslands(partId: Int, subIndex: Int): List<com.webmaletin.gtaviewer.uv.UvIsland> {

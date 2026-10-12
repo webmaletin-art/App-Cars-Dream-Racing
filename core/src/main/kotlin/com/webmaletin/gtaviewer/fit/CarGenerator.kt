@@ -57,9 +57,13 @@ object CarGenerator {
                 (req.vehicleType == null || v.types.any { it.label == req.vehicleType && it.confidence >= 0.4f }) &&
                     (req.style == null || v.types.any { it.label == req.style && it.confidence >= 0.4f })
             }
+            // sin tipo pedido se prefieren automóviles de calle (no camiones, furgonetas ni vehículos de servicio muy pequeños/grandes)
+            val roadCars = if (req.vehicleType != null) cands else cands.filter { v ->
+                v.wheelCount >= 4 && v.dims.l in 3.2f..6.2f && v.types.firstOrNull()?.label.let { it != VehicleTypes.TRUCK && it != VehicleTypes.VAN }
+            }.ifEmpty { cands }
             if (cands.isEmpty()) { notes += "No hay vehículos en el catálogo con tipo=${req.vehicleType ?: "cualquiera"} y estilo=${req.style ?: "cualquiera"}." }
             // se prefiere el que tiene más piezas compatibles disponibles (más variedad)
-            cands.sortedByDescending { c -> store.componentsOf(c.id).size }.take(5).let { top -> if (top.isEmpty()) null else top[rnd.nextInt(top.size)] }
+            roadCars.sortedByDescending { c -> minOf(store.componentsOf(c.id).size, 14) }.take(5).let { top -> if (top.isEmpty()) null else top[rnd.nextInt(top.size)] }
         }
         if (base == null) return GenResult("", "", emptyList(), listOf("Falta un vehículo base que cumpla los filtros"), notes, req.seed, req)
         val info = FitPlanner.baseInfo(store, base.id) ?: return GenResult(base.id, base.name, emptyList(), listOf("La base no tiene datos de piezas (reimporte el vehículo)"), notes, req.seed, req)

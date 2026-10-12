@@ -19,6 +19,12 @@ class RenderState(
     val selection: Set<Int>,
     val paint: PaintScheme,
     val sceneScale: Float,
+    /** Si no es null y coincide con el de la sincronización anterior, el renderer conserva en GPU lo que no cambió (taller). */
+    val sessionKey: Any? = null,
+    /** Cuadrícula/suelo de referencia. */
+    val showGround: Boolean = true,
+    /** Triángulos en espacio de visor (x,y,z ×3) que se resaltan encima (caras elegidas a mano). */
+    val overlay: FloatArray? = null,
 )
 
 /**
@@ -39,19 +45,23 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
     private var gpuModel: VehicleModel? = null
     private val geoVbo = HashMap<Int, Int>()
     private val subIbo = HashMap<Int, Int>()
+    private val geoRef = HashMap<Int, GeometryData>()
+    private val subRef = HashMap<Int, IntArray>()
     private val texIds = HashMap<TextureImage, Int>()
+    private val texVersion = HashMap<TextureImage, Int>()
+    private var gpuSession: Any? = null
     private var lineVbo = 0
     private var groundY = 0f
     private var maxTexSize = 2048
 
     // uniforms
     private var uMVP = 0; private var uModel = 0; private var uTex = 0; private var uColor = 0
-    private var uUseTex = 0; private var uCamPos = 0; private var uHighlight = 0; private var uHighlightColor = 0
+    private var uSpec = 0; private var uUseTex = 0; private var uCamPos = 0; private var uHighlight = 0; private var uHighlightColor = 0
     private var lMVP = 0; private var lColor = 0
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         // El contexto GL es nuevo: los ids anteriores ya no son válidos.
-        geoVbo.clear(); subIbo.clear(); texIds.clear(); gpuModel = null; lineVbo = 0
+        geoVbo.clear(); subIbo.clear(); texIds.clear(); geoRef.clear(); subRef.clear(); texVersion.clear(); gpuModel = null; gpuSession = null; lineVbo = 0
         GLES30.glClearColor(0.058f, 0.067f, 0.082f, 1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         try {
@@ -59,7 +69,7 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
             lineProg = link(ViewerShaders.LINE_VERTEX, ViewerShaders.LINE_FRAGMENT)
             uMVP = GLES30.glGetUniformLocation(meshProg, "uMVP"); uModel = GLES30.glGetUniformLocation(meshProg, "uModel")
             uTex = GLES30.glGetUniformLocation(meshProg, "uTex"); uColor = GLES30.glGetUniformLocation(meshProg, "uColor")
-            uUseTex = GLES30.glGetUniformLocation(meshProg, "uUseTex"); uCamPos = GLES30.glGetUniformLocation(meshProg, "uCamPos")
+            uUseTex = GLES30.glGetUniformLocation(meshProg, "uUseTex"); uSpec = GLES30.glGetUniformLocation(meshProg, "uSpec"); uCamPos = GLES30.glGetUniformLocation(meshProg, "uCamPos")
             uHighlight = GLES30.glGetUniformLocation(meshProg, "uHighlight"); uHighlightColor = GLES30.glGetUniformLocation(meshProg, "uHighlightColor")
             lMVP = GLES30.glGetUniformLocation(lineProg, "uMVP"); lColor = GLES30.glGetUniformLocation(lineProg, "uColor")
             val sz = IntArray(1); GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, sz, 0); maxTexSize = sz[0].coerceAtLeast(1024)
@@ -81,7 +91,11 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         if (meshProg == 0) return
         val st = state
-        if (st.model !== gpuModel) switchModel(st.model)
+        if (st.model !== gpuModel) {
+            if (st.sessionKey != null && st.sessionKey === gpuSession && gpuModel != null && st.model != null) syncModel(st.model) else switchModel(st.model)
+            gpuSession = st.sessionKey
+        }
+        refreshTextures()
         val model = gpuModel ?: return
 
         val aspect = width.toFloat() / height
@@ -89,7 +103,7 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
         val vp = Mat4.multiply(proj, view)
         val scaleM = Mat4.scale(st.sceneScale)
 
-        drawGround(vp, st.sceneScale)
+        if (st.showGround) drawGround(vp, st.sceneScale)
 
         GLES30.glUseProgram(meshProg)
         GLES30.glUniform1i(uTex, 0)
@@ -116,6 +130,25 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
         }
         GLES30.glDepthMask(true); GLES30.glDisable(GLES30.GL_BLEND)
         drawSelectionBoxes(model, st, vp)
+        st.overlay?.let { if (it.isNotEmpty()) drawOverlay(it, Mat4.multiply(vp, scaleM)) }
+    }
+
+    private fun drawOverlay(tris: FloatArray, mvp: FloatArray) {
+        if (lineVbo == 0) return
+        val bb = ByteBuffer.allocateDirect(tris.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        bb.put(tris); bb.position(0)
+        GLES30.glUseProgram(lineProg)
+        GLES30.glUniformMatrix4fv(lMVP, 1, false, mvp, 0)
+        GLES30.glUniform4f(lColor, 1f, 0.25f, 0.2f, 0.55f)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, lineVbo)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, tris.size * 4, bb, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glDisableVertexAttribArray(1); GLES30.glDisableVertexAttribArray(2)
+        GLES30.glEnable(GLES30.GL_BLEND); GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-2f, -2f)
+        GLES30.glDepthFunc(GLES30.GL_LEQUAL); GLES30.glDepthMask(false)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, tris.size / 3)
+        GLES30.glDepthMask(true); GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glDisable(GLES30.GL_BLEND); GLES30.glDepthFunc(GLES30.GL_LESS)
     }
 
     private fun drawSub(sm: SubMesh, st: RenderState) {
@@ -134,6 +167,7 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
             GLES30.glUniform1i(uUseTex, 1)
         } else GLES30.glUniform1i(uUseTex, 0)
         GLES30.glUniform1f(uHighlight, if (sm.id in st.selection) 0.55f else 0f)
+        GLES30.glUniform2f(uSpec, mat.metallic, mat.roughness)
 
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo)
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, STRIDE, 0)
@@ -210,10 +244,10 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
             val uploadedGeo = HashSet<Int>()
             for (sm in newModel.subMeshes) {
                 val g = sm.geometry
-                if (uploadedGeo.add(g.id)) geoVbo[g.id] = uploadGeometry(g)
-                subIbo[sm.id] = uploadIndices(sm.indices)
+                if (uploadedGeo.add(g.id)) { geoVbo[g.id] = uploadGeometry(g); geoRef[g.id] = g }
+                subIbo[sm.id] = uploadIndices(sm.indices); subRef[sm.id] = sm.indices
             }
-            for (m in newModel.materials) m.texture?.let { if (it !in texIds) texIds[it] = uploadTexture(it) }
+            for (m in newModel.materials) m.texture?.let { if (it !in texIds) { texIds[it] = uploadTexture(it); texVersion[it] = it.version } }
             gpuError = null
         } catch (e: Throwable) {
             gpuError = "No se pudo subir el modelo a la GPU: ${e.message}"
@@ -222,12 +256,51 @@ class VehicleRenderer(private val camera: OrbitCamera) : GLSurfaceView.Renderer 
         }
     }
 
+    /**
+     * Sincronización incremental (taller): conserva VBO/IBO/texturas que no cambiaron (comparados por referencia), libera los que
+     * ya no se usan y sube solo lo nuevo. Evita volver a subir todo el coche tras mover una pieza.
+     */
+    private fun syncModel(newModel: VehicleModel) {
+        try {
+            gpuModel = newModel
+            val full = newModel.fullBounds()
+            if (full != null) { groundY = full.min[1]; val r = full.radius; gridStep = if (r > 40) 10f else if (r > 12) 5f else if (r > 6) 2f else 1f }
+            val needGeo = HashMap<Int, GeometryData>(); val needSub = HashMap<Int, IntArray>()
+            for (sm in newModel.subMeshes) { needGeo[sm.geometry.id] = sm.geometry; needSub[sm.id] = sm.indices }
+            val oldGeo = geoVbo.keys.filter { id -> needGeo[id] !== geoRef[id] }
+            if (oldGeo.isNotEmpty()) { GLES30.glDeleteBuffers(oldGeo.size, oldGeo.map { geoVbo[it]!! }.toIntArray(), 0); oldGeo.forEach { geoVbo.remove(it); geoRef.remove(it) } }
+            val oldSub = subIbo.keys.filter { id -> needSub[id] !== subRef[id] }
+            if (oldSub.isNotEmpty()) { GLES30.glDeleteBuffers(oldSub.size, oldSub.map { subIbo[it]!! }.toIntArray(), 0); oldSub.forEach { subIbo.remove(it); subRef.remove(it) } }
+            for ((id, g) in needGeo) if (id !in geoVbo) { geoVbo[id] = uploadGeometry(g); geoRef[id] = g }
+            for ((id, idx) in needSub) if (id !in subIbo) { subIbo[id] = uploadIndices(idx); subRef[id] = idx }
+            val needTex = newModel.materials.mapNotNull { it.texture }.toSet()
+            val goneTex = texIds.keys.filter { it !in needTex }
+            if (goneTex.isNotEmpty()) { GLES30.glDeleteTextures(goneTex.size, goneTex.map { texIds[it]!! }.toIntArray(), 0); goneTex.forEach { texIds.remove(it); texVersion.remove(it) } }
+            for (t in needTex) if (t !in texIds) { texIds[t] = uploadTexture(t); texVersion[t] = t.version }
+            gpuError = null
+        } catch (e: Throwable) {
+            gpuError = "No se pudo sincronizar el modelo con la GPU: ${e.message}"
+            Log.e(TAG, gpuError!!, e)
+            releaseGpu(); gpuModel = null
+        }
+    }
+
+    /** El editor de texturas cambia píxeles en el sitio y sube [TextureImage.version]: se vuelve a subir solo esa textura. */
+    private fun refreshTextures() {
+        for ((t, id) in texIds.entries.toList()) {
+            if (texVersion[t] != t.version) {
+                GLES30.glDeleteTextures(1, intArrayOf(id), 0)
+                texIds[t] = uploadTexture(t); texVersion[t] = t.version
+            }
+        }
+    }
+
     /** Libera VBO, IBO y texturas del vehículo anterior. */
     fun releaseGpu() {
         if (geoVbo.isNotEmpty()) GLES30.glDeleteBuffers(geoVbo.size, geoVbo.values.toIntArray(), 0)
         if (subIbo.isNotEmpty()) GLES30.glDeleteBuffers(subIbo.size, subIbo.values.toIntArray(), 0)
         if (texIds.isNotEmpty()) GLES30.glDeleteTextures(texIds.size, texIds.values.toIntArray(), 0)
-        geoVbo.clear(); subIbo.clear(); texIds.clear()
+        geoVbo.clear(); subIbo.clear(); texIds.clear(); geoRef.clear(); subRef.clear(); texVersion.clear()
     }
 
     private fun uploadGeometry(g: GeometryData): Int {

@@ -22,6 +22,10 @@ class GlViewerView(context: Context) : GLSurfaceView(context) {
     val renderer = VehicleRenderer(camera)
 
     var onTap: ((x: Float, y: Float, w: Int, h: Int) -> Unit)? = null
+    /** Si [dragMode] está activo, un dedo MUEVE la pieza seleccionada (en lugar de rotar la cámara): (x0,y0)→(x1,y1) en píxeles. */
+    var dragMode = false
+    var onDrag: ((x0: Float, y0: Float, x1: Float, y1: Float, w: Int, h: Int) -> Unit)? = null
+    var onDragEnd: (() -> Unit)? = null
     private var pendingFrame: (() -> Unit)? = null
     private var framedOnce = false
 
@@ -88,7 +92,8 @@ class GlViewerView(context: Context) : GLSurfaceView(context) {
                 } else if (!multi) {
                     if (!moved && (abs(e.x - downX) > slop || abs(e.y - downY) > slop)) moved = true
                     if (moved) {
-                        synchronized(camera) { camera.orbit(-(e.x - lastX) * 0.4f, (e.y - lastY) * 0.4f) }
+                        if (dragMode && onDrag != null) onDrag?.invoke(lastX, lastY, e.x, e.y, width, height)
+                        else synchronized(camera) { camera.orbit(-(e.x - lastX) * 0.4f, (e.y - lastY) * 0.4f) }
                         requestRender()
                     }
                     lastX = e.x; lastY = e.y
@@ -100,6 +105,7 @@ class GlViewerView(context: Context) : GLSurfaceView(context) {
                 lastX = e.getX(remaining); lastY = e.getY(remaining)
             }
             MotionEvent.ACTION_UP -> {
+                if (moved && dragMode) onDragEnd?.invoke()
                 if (!moved && !multi && e.eventTime - downTime < 350) {
                     if (e.eventTime - lastTapTime < 280) { lastTapTime = 0; onDoubleTap?.invoke() }
                     else { lastTapTime = e.eventTime; onTap?.invoke(e.x, e.y, width, height); performClick() }
