@@ -122,7 +122,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var beamVehicles by mutableStateOf<List<BeamVehicleEntry>>(emptyList()); private set
     var beamProgress by mutableStateOf<String?>(null); private set
     var beamTexSize by mutableStateOf(1024)
+    var beamModel by mutableStateOf(true)
     var beamPhysics by mutableStateOf(true)
+    var beamAudio by mutableStateOf(false)
+    var beamConfigs by mutableStateOf(false)
     val beamConfigChoice = mutableStateMapOf<String, String>()
     var currentBeam by mutableStateOf<BeamLoadResult?>(null); private set
     var currentBeamEntry by mutableStateOf<BeamVehicleEntry?>(null); private set
@@ -611,12 +614,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ExportScope.FULL -> m.parts.filter { it.defaultVisible }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
             ExportScope.SELECTION -> e.state.selection - e.state.deleted
         }
-        if (ids.isEmpty()) { message = "No hay partes visibles para exportar"; return }
+        val beamAudioOnly = currentBeam != null && !beamModel && scope != ExportScope.SELECTION
+        if (ids.isEmpty() && !beamAudioOnly) { message = "No hay partes visibles para exportar"; return }
         val label = if (scope == ExportScope.SELECTION) selectionLabel() else null
         // el archivo exportado se llama como el archivo importado (no hay que volver a escribir el nombre)
         val base = ExportNaming.baseName(currentItem?.dffLabel?.substringBeforeLast('.') ?: m.name, false, label)
         val paintNow = paint; val scale = sceneScale; val damageNow = damageMode
-        val beam = currentBeam; val withPhysics = beamPhysics
+        val beam = currentBeam; val beamEntry = currentBeamEntry
+        val bopts = if (scope == ExportScope.SELECTION) BeamExportOptions(model = true, physics = false) else if (!beamModel && !beamPhysics && !beamAudio && !beamConfigs) BeamExportOptions() else BeamExportOptions(beamModel, beamPhysics, beamAudio, beamConfigs)
         viewModelScope.launch {
             exporting = true
             busyText = "Exportando ${format.label}..."
@@ -624,7 +629,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val out = withContext(Dispatchers.Default) {
                     // exportar una selección (p. ej. solo ruedas) nunca arrastra daños; el vehículo sí
                     val dmg = if (scope == ExportScope.SELECTION) DamageMode.NONE else damageNow
-                    if (beam != null) BeamExport.export(beam, m, ids, e.state.deleted, paintNow, scale, base, format, dmg, withPhysics && scope != ExportScope.SELECTION)
+                    if (beam != null && beamEntry != null) BeamExport.export(beam, beamEntry, m, ids, e.state.deleted, paintNow, scale, base, format, dmg, bopts)
                     else VehicleExport.export(m, ids, e.state.deleted, paintNow, scale, base, format, dmg)
                 }
                 val file = withContext(Dispatchers.IO) { ExportFiles.cacheFile(ctx, out.fileName).also { it.writeBytes(out.bytes) } }

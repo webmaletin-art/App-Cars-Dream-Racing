@@ -102,7 +102,7 @@ class BeamNgTest {
             entry(d + "main.materials.json", """{"paint":{"name":"paint","mapTo":"paint","Stages":[{"colorPaletteMap":"/x.png","metallicFactor":0.9},{}]}}"""),
             entry(d + "info.json", """{"Brand":"Test","Name":"Car","default_pc":"base","defaultPaintName1":"Rojo","paints":{"Rojo":{"baseColor":[1,0,0,1],"metallic":0.5,"roughness":0.3}}}"""),
             entry(d + "base.pc", """{"mainPartName":"tcar","parts":{"tcar_wheel":"tcar_wheel_a","tcar_glass":"tcar_glass_a"}}"""),
-            entry(d + "info_base.json", """{"Configuration":"Base","Drivetrain":"RWD","Power":100,"Weight":1000}"""),
+            entry("art/sound/engine/ENG/1000.wav", "RIFFfake"), entry("art/sound/blends/ENG.sfxBlend2D.json", "{}"), entry(d + "info_base.json", """{"Configuration":"Base","Drivetrain":"RWD","Power":100,"Weight":1000}"""),
         )
     }
 
@@ -139,9 +139,9 @@ class BeamNgTest {
         val v = BeamNgScanner.scan("x", "Mi_Archivo", modEntries()).vehicles.single()
         val r = BeamNgBuilder.load(v, null)
         val ids = r.model.parts.filter { it.defaultVisible }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
-        val plain = BeamExport.export(r, r.model, ids, emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.NONE, physics = false)
+        val plain = BeamExport.export(r, v, r.model, ids, emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.NONE, BeamExportOptions(physics = false))
         assertEquals("Mi_Archivo.glb", plain.fileName)
-        val full = BeamExport.export(r, r.model, ids, emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.EMBEDDED, physics = true)
+        val full = BeamExport.export(r, v, r.model, ids, emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.EMBEDDED, BeamExportOptions(physics = true))
         assertEquals("Mi_Archivo_completo.zip", full.fileName)
         val names = ZipInputStream(ByteArrayInputStream(full.bytes)).use { z -> generateSequence { z.nextEntry }.map { it.name }.toList() }
         assertEquals(listOf("Mi_Archivo.glb", "Mi_Archivo_fisica.json"), names)
@@ -149,6 +149,19 @@ class BeamNgTest {
         val glb = ZipInputStream(ByteArrayInputStream(full.bytes)).use { z -> generateSequence { z.nextEntry }.first { it.name.endsWith(".glb") }.let { z.readBytes() } }
         val j = JSONObject(String(glb, 20, ByteBuffer.wrap(glb).order(ByteOrder.LITTLE_ENDIAN).getInt(12), Charsets.UTF_8))
         assertEquals(3, j.getJSONArray("nodes").length(), "raíz + carrocería + rueda")
+    }
+
+    @Test fun zipWithModelAudioAndConfigsAndAudioOnly() {
+        val v = BeamNgScanner.scan("x", "Mi_Archivo", modEntries()).vehicles.single()
+        val r = BeamNgBuilder.load(v, null)
+        val ids = r.model.parts.filter { it.defaultVisible }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
+        fun names(o: ExportOutput) = ZipInputStream(ByteArrayInputStream(o.bytes)).use { z -> generateSequence { z.nextEntry }.map { it.name }.toList() }
+        val all = BeamExport.export(r, v, r.model, ids, emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.EMBEDDED, BeamExportOptions(physics = true, audio = true, configs = true))
+        assertEquals("Mi_Archivo_completo.zip", all.fileName)
+        assertEquals(listOf("Mi_Archivo.glb", "Mi_Archivo_fisica.json", "audio/art/sound/blends/ENG.sfxBlend2D.json", "audio/art/sound/engine/ENG/1000.wav", "configuraciones/base.pc", "configuraciones/info.json", "configuraciones/info_base.json"), names(all))
+        val audio = BeamExport.export(r, v, r.model, emptySet(), emptySet(), PaintScheme(), 1f, "Mi_Archivo", ExportFormat.GLB, DamageMode.NONE, BeamExportOptions(model = false, physics = false, audio = true))
+        assertEquals("Mi_Archivo_audio.zip", audio.fileName); assertEquals(listOf("audio/art/sound/blends/ENG.sfxBlend2D.json", "audio/art/sound/engine/ENG/1000.wav"), names(audio))
+        assertFailsWith<IllegalArgumentException> { BeamExportOptions(model = false, physics = false) }
     }
 
     // ---------------------------------------------------------------------------------------------- mod real (solo si está)
@@ -167,7 +180,7 @@ class BeamNgTest {
             assertTrue(r.model.textures.size >= 15, "texturas decodificadas (DDS BC1/BC3/BC7, PNG): ${r.model.textures.size}")
             assertTrue(r.physics.totalMass in 800.0..2500.0 && r.physics.beams.size > 1000)
             val ids = r.model.parts.filter { it.defaultVisible }.flatMap { p -> p.subMeshes.map { it.id } }.toSet()
-            val out = BeamExport.export(r, r.model, ids, emptySet(), PaintScheme(r.paintPrimary, 0x222222), 1f, "Nissan_Skyline_R32", ExportFormat.GLB, DamageMode.EMBEDDED, physics = true)
+            val out = BeamExport.export(r, v, r.model, ids, emptySet(), PaintScheme(r.paintPrimary, 0x222222), 1f, "Nissan_Skyline_R32", ExportFormat.GLB, DamageMode.EMBEDDED, BeamExportOptions(physics = true, audio = true, configs = true))
             assertEquals("Nissan_Skyline_R32_completo.zip", out.fileName)
             println("REAL-BEAM: ${r.model.parts.size} piezas, ${r.model.totalTriangles} tris, ${r.model.textures.size} texturas, zip ${out.bytes.size / 1024} KB, avisos ${r.model.warnings.size}")
         }

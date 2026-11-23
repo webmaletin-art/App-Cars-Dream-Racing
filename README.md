@@ -52,6 +52,7 @@ El menú inicial tiene dos entradas: **GTA** (el visor de siempre) y **BEAMNG CA
   Pillow en archivos reales)**, PNG y JPG, pintura por defecto del coche, ruedas colocadas con los `nodeOffset` del jbeam. Orientación BeamNG (+X izquierda, +Y atrás) → sin espejo.
 * **Exportación:** GLB con **una malla por pieza** (puertas, capó, cristales, ruedas…), mismas opciones de formato que GTA, y la **física** (nodos + vigas + masa + centro de masa + ruedas)
   en `<nombre>_fisica.json` dentro del mismo ZIP (`<nombre>_completo.zip`).
+* **Un solo ZIP con todo:** en el diálogo de exportación marcas qué lleva (modelo GLB con daños, física, audio de `art/sound`, todas las configuraciones `.pc`) y sale `<nombre>_completo.zip`; «Exportar solo audio» da `<nombre>_audio.zip`.
 * **Daños:** BeamNG **no guarda mallas dañadas**; simula la deformación con vigas. Solo salen las variantes sueltas que traiga el mod (p. ej. `windshield_dmg`), tratadas como los daños de GTA.
 * **Límites reales:** los neumáticos y piezas del juego base (`vehicles/common`) no vienen en el mod, así que no aparecen (se avisa); los props animados (volante, agujas) se colocan por heurística;
   las texturas se reducen a 512/1024/2048 px según el selector (los DDS se decodifican directamente en el mipmap adecuado).

@@ -70,8 +70,16 @@ fun ExportDialog(vm: AppViewModel, onDismiss: () -> Unit, onGo: (ExportFormat, E
                 DamageRow(vm.damageMode, fmtAll) { vm.damageMode = it }
                 Text("Los daños (*_dam) se exportan junto con el vehículo, no como piezas sueltas. Si falta la pieza intacta (por ejemplo, quitó una puerta), su daño tampoco sale.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (vm.currentBeam != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(vm.beamPhysics, { vm.beamPhysics = it }); Text("Incluir la física (nodos y vigas, JSON) en el mismo ZIP", fontSize = 13.sp) }
-                    Text("BeamNG no guarda mallas dañadas: simula los daños deformando vigas. Solo salen las variantes sueltas que traiga el mod (p. ej. parabrisas roto). La física (masa, ruedas, centro de masa, nodos y vigas) va en un .json para derivar parámetros de tu motor; Godot no la ejecuta tal cual.",
+                    SectionTitle("QUÉ LLEVA EL ZIP (BeamNG)")
+                    @Composable fun opt(checked: Boolean, label: String, on: (Boolean) -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked, on); Text(label, fontSize = 13.sp) }
+                    opt(vm.beamModel, "Modelo 3D (piezas separadas, con daños si el mod los trae)") { vm.beamModel = it }
+                    opt(vm.beamPhysics, "Física: nodos y vigas, masa, ruedas (JSON)") { vm.beamPhysics = it }
+                    opt(vm.beamAudio, "Audio del mod (motor, escape, turbo, arranque + configuración de sonido)") { vm.beamAudio = it }
+                    opt(vm.beamConfigs, "Todas las configuraciones (.pc) y sus fichas") { vm.beamConfigs = it }
+                    Text("Con más de una opción todo va en UN solo ZIP. El audio del mod no indica qué sonido usa cada configuración, así que van todos los de art/sound.",
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { vm.beamModel = false; vm.beamPhysics = false; vm.beamAudio = true; vm.beamConfigs = false; onGo(fmtAll, ExportScope.VISIBLE) }, modifier = Modifier.fillMaxWidth()) { Text("EXPORTAR SOLO AUDIO", fontWeight = FontWeight.Bold) }
+                    Text("BeamNG no guarda mallas dañadas: simula los daños deformando vigas. Solo salen las variantes sueltas que traiga el mod (p. ej. parabrisas roto). Godot no ejecuta la física tal cual: sirve para derivar masa, ruedas y centro de masa.",
                         fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(6.dp))
