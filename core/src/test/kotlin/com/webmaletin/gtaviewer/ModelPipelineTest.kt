@@ -262,9 +262,9 @@ class ModelPipelineTest {
         val noWheels = ExportSceneBuilder.build(m, s.visibleIds())
         assertTrue(noWheels.meshes.none { it.partName.startsWith("Wheel") })
         assertTrue(noWheels.meshes.any { it.partName == "chassis" })
-        assertEquals("Test_Car_editado", ExportNaming.baseName("Test Car", edited = true))
-        assertEquals("ruedas", ExportNaming.baseName("Test Car", edited = true, label = "ruedas"))
-        assertEquals("Test_Car_editado.glb", ExportNaming.fileName(ExportNaming.baseName("Test Car", true), ExportFormat.GLB))
+        assertEquals("Test_Car", ExportNaming.baseName("Test Car", edited = true))
+        assertEquals("Test_Car_ruedas", ExportNaming.baseName("Test Car", edited = true, label = "ruedas"))
+        assertEquals("Test_Car.glb", ExportNaming.fileName(ExportNaming.baseName("Test Car", true), ExportFormat.GLB))
         // la geometría exportada de la rueda derecha queda a la derecha (-X en espacio de exportación = lado derecho)
         val fr = onlyWheels.meshes.first { it.partName.contains("FR") }
         val cx = (0 until fr.vertexCount).map { fr.positions[it * 3] }.average()

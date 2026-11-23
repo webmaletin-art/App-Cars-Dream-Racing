@@ -15,6 +15,8 @@ class BatchJob(
     val load: () -> VehicleModel,
     /** Configuración propia de este vehículo (null = sin tocar: todo lo visible por defecto). */
     val config: VehicleConfig?,
+    /** Nombre del archivo importado (sin extensión): con él se nombra todo lo exportado. */
+    val exportName: String = name,
 )
 
 enum class BatchState { PROCESSING, OK, WARNING, ERROR, CANCELLED }
@@ -70,7 +72,7 @@ object BatchExporter {
                     if (m.diagnostics.texturesMissing.isNotEmpty()) warn += "texturas faltantes: ${m.diagnostics.texturesMissing.joinToString()}"
                     if (m.validation.needsReview) warn += "modelo requiere revisión (${m.validation.reasons.firstOrNull()})"
 
-                    val base = uniqueBase(ExportNaming.fileSafe(job.name), usedNames)
+                    val base = uniqueBase(ExportNaming.fileSafe(job.exportName), usedNames)
                     val exported = VehicleExport.export(m, visible, session.state.deleted, paint, scale, base, format, damage)
                     if (exported.mime == ExportFormat.GLB.mime) { // un solo GLB (con o sin daños dentro)
                         zip.putNextEntry(ZipEntry(exported.fileName)); zip.write(exported.bytes); zip.closeEntry()

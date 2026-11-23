@@ -14,6 +14,8 @@ interface ByteSource {
     fun readBytes(): ByteArray
     /** Lee como máximo [max] bytes del inicio (descomprime solo lo necesario). */
     fun readPrefix(max: Int): ByteArray
+    /** Flujo de lectura (descomprime sobre la marcha): para archivos enormes que no deben cargarse enteros en memoria. */
+    fun openStream(): java.io.InputStream = java.io.ByteArrayInputStream(readBytes())
 }
 
 class MemorySource(override val displayName: String, private val data: ByteArray) : ByteSource {
@@ -63,6 +65,8 @@ class ZipArchive private constructor(
         override fun readBytes(): ByteArray = synchronized(lock) {
             zip.getInputStream(entry).use { it.readBytes() }
         }
+        /** Cada llamada abre su propio flujo sobre la entrada (el ZipFile permite lecturas concurrentes de entradas distintas). */
+        override fun openStream(): java.io.InputStream = zip.getInputStream(entry)
         override fun readPrefix(max: Int): ByteArray = synchronized(lock) {
             zip.getInputStream(entry).use { ins ->
                 val buf = ByteArray(minOf(max.toLong(), if (entry.size >= 0) entry.size else Long.MAX_VALUE).toInt())

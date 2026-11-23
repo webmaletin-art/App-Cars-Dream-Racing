@@ -39,6 +39,7 @@ fun AppRoot(vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importZips(uris) }
+    val beamLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importBeam(uris) }
     val dffLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u -> if (u != null) vm.setManualDffFromUri(u) }
     val txdLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u -> if (u != null) vm.setManualTxdFromUri(u) }
     val saveZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u -> if (u != null) vm.saveExportTo(u) else { vm.pendingSave = null; vm.pendingBatchSave = null } }
@@ -53,7 +54,7 @@ fun AppRoot(vm: AppViewModel) {
     // Al terminar la exportación masiva se ofrece guardar VEHICULOS_GLB.zip con el selector del sistema
     LaunchedEffect(vm.pendingBatchSave) { vm.pendingBatchSave?.let { saveZip.launch(it.name) } }
 
-    BackHandler(enabled = vm.screen != Screen.HOME) { vm.back() }
+    BackHandler(enabled = vm.screen != Screen.MENU) { vm.back() }
 
     val copy: (String) -> Unit = { text ->
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -72,6 +73,8 @@ fun AppRoot(vm: AppViewModel) {
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = Bg, contentWindowInsets = WindowInsets(0)) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
             when (vm.screen) {
+                Screen.MENU -> MenuScreen(vm)
+                Screen.BEAM -> BeamScreen(vm, onImport = { beamLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) })
                 Screen.HOME -> HomeScreen(vm, onImport = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) })
                 Screen.MANUAL -> ManualScreen(vm,
                     onImport = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) },

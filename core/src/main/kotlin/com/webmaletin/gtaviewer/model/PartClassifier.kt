@@ -6,7 +6,7 @@ object PartClassifier {
 
     const val DAMAGE_NOTE = "variante dañada"
 
-    private val suffixes = listOf("_ok", "_dam", "_vlo", "_lod", "_dummy", "_shiny")
+    private val suffixes = listOf("_ok", "_dam", "_dmg", "_vlo", "_lod", "_dummy", "_shiny")
 
     fun variantOf(name: String): String? {
         val n = name.lowercase()

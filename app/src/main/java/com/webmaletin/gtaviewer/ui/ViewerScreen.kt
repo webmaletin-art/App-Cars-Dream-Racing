@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ fun ViewerScreen(vm: AppViewModel) {
     var gl by remember { mutableStateOf<GlViewerView?>(null) }
     var showExport by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
+    var showCfg by remember { mutableStateOf(false) }
     val owner = LocalLifecycleOwner.current
 
     DisposableEffect(owner, gl) {
@@ -77,6 +79,7 @@ fun ViewerScreen(vm: AppViewModel) {
                     Text(if (c == null) "" else "Partes visibles: ${c.partsVisible} / ${c.partsTotal} · Meshes visibles: ${c.meshesVisible} / ${c.meshesTotal}", fontSize = 11.sp, color = Accent)
                     vm.currentItem?.let { Text("${it.manual.let { m -> if (m) "Manual · " else "" }}${vm.statusOf(it.id).symbol} ${vm.statusOf(it.id).label}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+                if (vm.currentBeam != null) TextButton(onClick = { showCfg = true }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("CONFIG.", fontSize = 12.sp) }
                 TextButton(onClick = { showInfo = true }) { Text("INFO") }
                 TextButton(onClick = { vm.navigate(Screen.DIAGNOSTICS) }) { Text("DIAG.") }
             }
@@ -123,6 +126,21 @@ fun ViewerScreen(vm: AppViewModel) {
     }
     if (showExport) ExportDialog(vm, onDismiss = { showExport = false }, onGo = { f, s -> showExport = false; vm.export(f, s) })
     if (showInfo) InfoDialog(vm, onDismiss = { showInfo = false })
+    if (showCfg) vm.currentBeamEntry?.let { v ->
+        AlertDialog(onDismissRequest = { showCfg = false }, confirmButton = { TextButton(onClick = { showCfg = false }) { Text("Cerrar") } }, title = { Text("Configuración · ${v.displayName}") },
+            text = {
+                androidx.compose.foundation.lazy.LazyColumn {
+                    items(v.configs, key = { it.name }) { c ->
+                        val cur = c.name == vm.currentBeam?.config
+                        Column(Modifier.fillMaxWidth().clickable { showCfg = false; if (!cur) vm.reloadBeamConfig(c.name) }.padding(vertical = 8.dp)) {
+                            Text((if (cur) "✔ " else "") + c.label, fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal)
+                            if (c.summary.isNotBlank()) Text(c.summary, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            })
+    }
 }
 
 @Composable

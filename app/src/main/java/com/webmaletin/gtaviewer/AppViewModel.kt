@@ -15,6 +15,7 @@ import com.webmaletin.gtaviewer.editing.EditState
 import com.webmaletin.gtaviewer.editing.GamePrep
 import com.webmaletin.gtaviewer.editing.PrepOptions
 import com.webmaletin.gtaviewer.editing.VehicleConfig
+import com.webmaletin.gtaviewer.beamng.*
 import com.webmaletin.gtaviewer.export.*
 import com.webmaletin.gtaviewer.gl.RenderState
 import com.webmaletin.gtaviewer.gta.Names
@@ -24,6 +25,7 @@ import com.webmaletin.gtaviewer.io.ImportedArchive
 import com.webmaletin.gtaviewer.io.Storage
 import com.webmaletin.gtaviewer.io.UriSource
 import com.webmaletin.gtaviewer.model.*
+import com.webmaletin.gtaviewer.txd.TextureImage
 import com.webmaletin.gtaviewer.selection.*
 import com.webmaletin.gtaviewer.zip.ArchiveEntry
 import kotlinx.coroutines.*
@@ -32,7 +34,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Screen { HOME, VIEWER, MANUAL, DIAGNOSTICS }
+enum class Screen { MENU, HOME, BEAM, VIEWER, MANUAL, DIAGNOSTICS }
 enum class ExportScope { VISIBLE, FULL, SELECTION }
 enum class EditTab { ACTIONS, MATERIALS }
 
@@ -61,7 +63,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
 
     // ---- navegación / importación
-    var screen by mutableStateOf(Screen.HOME); private set
+    var screen by mutableStateOf(Screen.MENU); private set
     var scanProgress by mutableStateOf<ScanProgress?>(null); private set
     var report by mutableStateOf<ScanReport?>(null); private set
     var archiveNames by mutableStateOf<List<String>>(emptyList()); private set
@@ -116,6 +118,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Contadores permanentes: partes y meshes visibles (se recalculan con cada cambio de visibilidad). */
     val counters: Counters? get() { val m = model ?: return null; return Outliner.counters(m, renderState.visible) }
 
+    // ---- BeamNG
+    var beamVehicles by mutableStateOf<List<BeamVehicleEntry>>(emptyList()); private set
+    var beamProgress by mutableStateOf<String?>(null); private set
+    var beamTexSize by mutableStateOf(1024)
+    var beamPhysics by mutableStateOf(true)
+    val beamConfigChoice = mutableStateMapOf<String, String>()
+    var currentBeam by mutableStateOf<BeamLoadResult?>(null); private set
+    var currentBeamEntry by mutableStateOf<BeamVehicleEntry?>(null); private set
+    private val beamArchives = ArrayList<AutoCloseable>()
+    private val beamTemp = ArrayList<File>()
+    private var beamJob: Job? = null
+    private var pendingBeam: BeamLoadResult? = null
+
     // ---- manual
     var manualDff by mutableStateOf<ManualFile?>(null); private set
     var manualTxd by mutableStateOf<ManualFile?>(null); private set
@@ -134,13 +149,100 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    init {
+        // JPG (texturas de BeamNG): lo decodifica el sistema; PNG/DDS los decodifica el núcleo
+        com.webmaletin.gtaviewer.image.Images.jpegDecoder = { bytes, name ->
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            bmp?.let { b ->
+                val w = b.width; val h = b.height; val px = IntArray(w * h); b.getPixels(px, 0, w, 0, 0, w, h)
+                val out = ByteArray(w * h * 4)
+                for (i in px.indices) { val c = px[i]; out[i * 4] = (c shr 16).toByte(); out[i * 4 + 1] = (c shr 8).toByte(); out[i * 4 + 2] = c.toByte(); out[i * 4 + 3] = (c ushr 24).toByte() }
+                b.recycle(); TextureImage(name, w, h, out, false, "JPEG")
+            }
+        }
+    }
+
     fun navigate(s: Screen) { screen = s }
 
     fun back(): Boolean = when (screen) {
-        Screen.HOME -> false
+        Screen.MENU -> false
+        Screen.HOME, Screen.BEAM -> { screen = Screen.MENU; true }
         Screen.VIEWER -> { closeVehicle(); true }
         else -> { screen = if (model != null && screen == Screen.DIAGNOSTICS) Screen.VIEWER else Screen.HOME; true }
     }
+
+    // ------------------------------------------------------------------ BeamNG
+
+    private fun closeBeamArchives() {
+        beamArchives.forEach { runCatching { it.close() } }; beamArchives.clear()
+        beamTemp.forEach { it.delete() }; beamTemp.clear()
+    }
+
+    /** Importa ZIP de mods de BeamNG (también un ZIP que contiene el ZIP del mod: se extrae a la caché). Solo lectura. */
+    fun importBeam(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        beamJob?.cancel()
+        beamJob = viewModelScope.launch {
+            beamProgress = "Abriendo archivos…"
+            try {
+                val found = withContext(Dispatchers.IO) {
+                    closeBeamArchives()
+                    val out = ArrayList<BeamVehicleEntry>()
+                    uris.forEachIndexed { i, u ->
+                        val file = Storage.displayName(ctx, u); val base = file.substringBeforeLast('.')
+                        beamProgress = "Abriendo $file…"
+                        val a = Storage.openZip(ctx, u, 500 + i); beamArchives += a
+                        val scan = BeamNgScanner.scan("$i", base, a.entries)
+                        out += scan.vehicles
+                        if (scan.vehicles.isEmpty()) for ((k, nz) in scan.nestedZips.withIndex()) {
+                            beamProgress = "Extrayendo ${nz.fileName} (${nz.size / 1048576} MB)…"
+                            val dir = File(ctx.cacheDir, "beam").apply { mkdirs() }
+                            val tmp = File(dir, "nested_${i}_$k.zip"); beamTemp += tmp
+                            nz.source.openStream().use { ins -> tmp.outputStream().buffered().use { ins.copyTo(it, 1 shl 16) } }
+                            val za = com.webmaletin.gtaviewer.zip.ZipArchive.open(600 + i * 20 + k, tmp, nz.fileName); beamArchives += za
+                            // el nombre de lo exportado es el del archivo que importaste
+                            out += BeamNgScanner.scan("$i-$k", base, za.entries).vehicles
+                        }
+                    }
+                    out
+                }
+                beamVehicles = found
+                log("BeamNG: ${found.size} coches (${found.sumOf { it.configs.size }} configuraciones)")
+                message = if (found.isEmpty()) "No se encontraron coches de BeamNG (carpeta vehicles/<coche>/ con .dae y .jbeam). Si es un RAR, descomprímalo a ZIP primero." else "${found.size} coche(s) de BeamNG detectados"
+            } catch (e: CancellationException) { throw e } catch (e: Throwable) {
+                log("ERROR BeamNG: ${e.message}"); message = "No se pudo abrir: ${e.message ?: e.javaClass.simpleName}"
+            } finally { beamProgress = null }
+        }
+    }
+
+    /** Nombre de lo que se exporta: el del archivo importado (+ carpeta si el ZIP trae varios coches, + configuración si no es la de por defecto). */
+    fun beamExportBase(v: BeamVehicleEntry, cfg: String?): String {
+        val multi = beamVehicles.count { it.sourceName == v.sourceName } > 1
+        return v.sourceName + (if (multi) "_${v.folder}" else "") + (if (cfg != null && !cfg.equals(v.defaultConfig, true)) "_$cfg" else "")
+    }
+
+    fun openBeam(v: BeamVehicleEntry, cfg: String? = beamConfigChoice[v.id] ?: v.defaultConfig) {
+        val label = v.configs.firstOrNull { it.name == cfg }?.label
+        val item = CatalogItem("beam:${v.id}:$cfg", v.displayName, beamExportBase(v, cfg), label, Compatibility(true, null), null, false) {
+            val r = BeamNgBuilder.load(v, cfg, beamTexSize) { busyText = it }
+            pendingBeam = r; r.model
+        }
+        viewModelScope.launch {
+            pendingBeam = null
+            loadModel("Cargando ${v.displayName}…", item)
+            val r = pendingBeam
+            if (r != null && model != null) {
+                currentBeam = r; currentBeamEntry = v
+                paint = PaintScheme(r.paintPrimary, 0x22262B); refreshEdit()
+                message = "BeamNG: ${v.displayName} · ${label ?: "?"}${r.paintName?.let { " · pintura $it" } ?: ""}"
+            }
+        }
+    }
+
+    fun chooseBeamConfig(v: BeamVehicleEntry, cfg: String) { beamConfigChoice[v.id] = cfg }
+
+    /** Cambia de configuración (piezas elegidas) del coche abierto. */
+    fun reloadBeamConfig(cfg: String) { currentBeamEntry?.let { beamConfigChoice[it.id] = cfg; openBeam(it, cfg) } }
 
     // ------------------------------------------------------------------ catálogo
 
@@ -275,16 +377,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var lastLoadError by mutableStateOf<String?>(null); private set
 
     private fun releaseModel() {
-        model = null; edit = null; currentItem = null
+        model = null; edit = null; currentItem = null; currentBeam = null; currentBeamEntry = null
         renderState = RenderState(null, emptySet(), emptySet(), paint, 1f) // el renderer libera VBO/IBO/texturas
         editState = EditState(emptySet(), emptySet(), emptySet())
     }
 
     fun closeVehicle() {
+        val back = if (currentBeam != null) Screen.BEAM else Screen.HOME
         saveCurrentConfig()
         releaseModel()
         outlinerOpen = false; editMode = false
-        screen = Screen.HOME
+        screen = back
     }
 
     // ------------------------------------------------------------------ configuración y estado por vehículo
@@ -510,16 +613,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (ids.isEmpty()) { message = "No hay partes visibles para exportar"; return }
         val label = if (scope == ExportScope.SELECTION) selectionLabel() else null
-        val edited = scope == ExportScope.VISIBLE && e.isEdited()
-        val base = ExportNaming.baseName(m.name, edited, label)
+        // el archivo exportado se llama como el archivo importado (no hay que volver a escribir el nombre)
+        val base = ExportNaming.baseName(currentItem?.dffLabel?.substringBeforeLast('.') ?: m.name, false, label)
         val paintNow = paint; val scale = sceneScale; val damageNow = damageMode
+        val beam = currentBeam; val withPhysics = beamPhysics
         viewModelScope.launch {
             exporting = true
             busyText = "Exportando ${format.label}..."
             try {
                 val out = withContext(Dispatchers.Default) {
                     // exportar una selección (p. ej. solo ruedas) nunca arrastra daños; el vehículo sí
-                    VehicleExport.export(m, ids, e.state.deleted, paintNow, scale, base, format, if (scope == ExportScope.SELECTION) DamageMode.NONE else damageNow)
+                    val dmg = if (scope == ExportScope.SELECTION) DamageMode.NONE else damageNow
+                    if (beam != null) BeamExport.export(beam, m, ids, e.state.deleted, paintNow, scale, base, format, dmg, withPhysics && scope != ExportScope.SELECTION)
+                    else VehicleExport.export(m, ids, e.state.deleted, paintNow, scale, base, format, dmg)
                 }
                 val file = withContext(Dispatchers.IO) { ExportFiles.cacheFile(ctx, out.fileName).also { it.writeBytes(out.bytes) } }
                 log("Exportado ${out.fileName} (${out.bytes.size / 1024} KB; ${out.entries.size} archivo(s))${out.limitations?.let { " | $it" } ?: ""}")
@@ -616,7 +722,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val format = batchFormat
         val zipName = "VEHICULOS_${format.name}.zip"
         // Cada trabajo lleva SU PROPIA configuración (snapshot); nunca una global.
-        val jobs = list.map { BatchJob(it.id, it.displayName, it.load, configs[it.id]) }
+        val jobs = list.map { BatchJob(it.id, it.displayName, it.load, configs[it.id], it.dffLabel.substringBeforeLast('.')) }
         val paintNow = paint
         val dmgMode = batchDamage
         batchCancel = false
@@ -671,6 +777,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         archives.forEach { it.close() }; archives.clear()
+        closeBeamArchives()
         Storage.clearImportCache(ctx)
     }
 }

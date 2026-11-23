@@ -40,6 +40,27 @@ Requisitos: JDK 17+, Android SDK 34 (`local.properties` con `sdk.dir`).
 6. **MODO MANUAL** (siempre disponible): elige cualquier DFF y cualquier TXD (del ZIP navegando carpetas, o del dispositivo), o «Cargar DFF sin TXD».
 7. **Diagnóstico**: contadores del ZIP, DFF/TXD válidos, materiales/texturas encontradas y faltantes, errores de chunks, parser usado, log copiable.
 
+## BeamNG cars (entrada aparte en el menú, debajo de GTA)
+
+El menú inicial tiene dos entradas: **GTA** (el visor de siempre) y **BEAMNG CARS**.
+
+* **Qué abre:** un `.zip` de mod de BeamNG.drive con `vehicles/<coche>/` (`.dae` + `.jbeam` + `main.materials.json` + texturas). Si el ZIP trae **otro ZIP dentro** (típico de los
+  paquetes de gamemodding), la app lo extrae sola a la caché. **RAR no se lee dentro de la app:** descomprímelo antes con tu administrador de archivos hasta obtener el `.zip`.
+* **Configuraciones:** cada `.pc` del mod (28 en el Skyline R32) se lista con su ficha (tracción, potencia, peso). La app resuelve las **ranuras** del jbeam (qué paragolpes, ruedas, motor…
+  lleva esa configuración) y muestra solo esas piezas; cambia de configuración con el botón CONFIG. del visor.
+* **Qué se ve:** Collada en streaming (el `.dae` del R32 pesa 128 MB y se lee sin cargarlo entero), materiales de `materials.json`, texturas **DDS (BC1/BC3/BC7, verificado bit a bit contra
+  Pillow en archivos reales)**, PNG y JPG, pintura por defecto del coche, ruedas colocadas con los `nodeOffset` del jbeam. Orientación BeamNG (+X izquierda, +Y atrás) → sin espejo.
+* **Exportación:** GLB con **una malla por pieza** (puertas, capó, cristales, ruedas…), mismas opciones de formato que GTA, y la **física** (nodos + vigas + masa + centro de masa + ruedas)
+  en `<nombre>_fisica.json` dentro del mismo ZIP (`<nombre>_completo.zip`).
+* **Daños:** BeamNG **no guarda mallas dañadas**; simula la deformación con vigas. Solo salen las variantes sueltas que traiga el mod (p. ej. `windshield_dmg`), tratadas como los daños de GTA.
+* **Límites reales:** los neumáticos y piezas del juego base (`vehicles/common`) no vienen en el mod, así que no aparecen (se avisa); los props animados (volante, agujas) se colocan por heurística;
+  las texturas se reducen a 512/1024/2048 px según el selector (los DDS se decodifican directamente en el mipmap adecuado).
+
+## Nombre de lo exportado
+
+Todo archivo exportado se llama **como el archivo que importaste** (GTA: el nombre del `.dff`; BeamNG: el nombre del ZIP, más la carpeta si el ZIP trae varios coches y la configuración
+si no es la de por defecto). Ya no se añade `_editado`; una selección añade su etiqueta (`alpha_ruedas.glb`).
+
 ## Formatos de exportación (para qué sirve cada uno)
 
 | Formato | Qué es | Úsalo cuando |

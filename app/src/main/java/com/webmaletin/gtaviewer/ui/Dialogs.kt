@@ -69,6 +69,11 @@ fun ExportDialog(vm: AppViewModel, onDismiss: () -> Unit, onGo: (ExportFormat, E
                 SectionTitle("DAÑOS DEL VEHÍCULO")
                 DamageRow(vm.damageMode, fmtAll) { vm.damageMode = it }
                 Text("Los daños (*_dam) se exportan junto con el vehículo, no como piezas sueltas. Si falta la pieza intacta (por ejemplo, quitó una puerta), su daño tampoco sale.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (vm.currentBeam != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(vm.beamPhysics, { vm.beamPhysics = it }); Text("Incluir la física (nodos y vigas, JSON) en el mismo ZIP", fontSize = 13.sp) }
+                    Text("BeamNG no guarda mallas dañadas: simula los daños deformando vigas. Solo salen las variantes sueltas que traiga el mod (p. ej. parabrisas roto). La física (masa, ruedas, centro de masa, nodos y vigas) va en un .json para derivar parámetros de tu motor; Godot no la ejecuta tal cual.",
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(6.dp))
                 Text("Se exporta exactamente lo que está visible${if (vm.isEdited) " (vehículo editado)" else ""}: partes marcadas = incluidas, desmarcadas = fuera.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 vm.counters?.let { Text("Partes visibles: ${it.partsVisible} / ${it.partsTotal}", fontSize = 12.sp, fontWeight = FontWeight.Bold) }

@@ -45,15 +45,20 @@ object Exporters {
     }
 }
 
-/** Nombres de archivo de exportación (NombreVehiculo.glb / NombreVehiculo_editado.glb / NombreVehiculo_OBJ.zip ...). */
+/** Nombres de archivo de exportación: SIEMPRE el nombre del archivo importado (así no hay que volver a escribirlo). */
 object ExportNaming {
     fun fileSafe(name: String): String =
         name.trim().replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").replace(Regex("_+"), "_").trim('_').ifEmpty { "vehiculo" }
 
-    /** @param label si no es nulo (p. ej. "ruedas", "puertas") reemplaza al nombre del vehículo para exportar una selección. */
-    fun baseName(vehicleName: String, edited: Boolean, label: String? = null): String {
-        val b = label?.let { fileSafe(it) } ?: fileSafe(vehicleName)
-        return if (edited && label == null) "${b}_editado" else b
+    /**
+     * @param source nombre del archivo importado (sin extensión).
+     * @param label si no es nulo (p. ej. "ruedas", "puertas") se añade al nombre al exportar solo una selección: «nombre_ruedas».
+     * @param edited se mantiene por compatibilidad; ya NO añade «_editado»: el archivo se llama igual que el importado.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun baseName(source: String, edited: Boolean = false, label: String? = null): String {
+        val b = fileSafe(source)
+        return if (label != null) "${b}_${fileSafe(label)}" else b
     }
 
     fun fileName(base: String, format: ExportFormat): String = when (format) {

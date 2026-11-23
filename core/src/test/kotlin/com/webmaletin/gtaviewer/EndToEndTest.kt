@@ -41,13 +41,13 @@ class EndToEndTest {
         val s = EditSession(model)
         s.select(SelectionTools.byCategory(model, PartCategory.WHEEL)); s.delete()
         val base = ExportNaming.baseName(model.name, s.isEdited())
-        assertEquals("Audi_A4_editado", base)
+        assertEquals("Audi_A4", base)
         val scene = ExportSceneBuilder.build(model, s.visibleIds(), PaintScheme(), 1f, base)
         assertTrue(scene.meshes.none { it.partName.startsWith("Wheel") })
         for (f in ExportFormat.values()) {
             val out = Exporters.forFormat(f).export(scene, base)
             assertTrue(out.bytes.size > 200, f.name)
-            assertTrue(out.fileName.startsWith("Audi_A4_editado"), out.fileName)
+            assertTrue(out.fileName.startsWith("Audi_A4"), out.fileName)
         }
         z.close()
     }
