@@ -25,17 +25,16 @@ import com.webmaletin.gtaviewer.ui.*
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
-    private val lab: LabViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { GtaTheme { AppRoot(vm, lab) } }
+        setContent { GtaTheme { AppRoot(vm) } }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(vm: AppViewModel, lab: LabViewModel) {
+fun AppRoot(vm: AppViewModel) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
 
@@ -46,7 +45,6 @@ fun AppRoot(vm: AppViewModel, lab: LabViewModel) {
     val saveBin = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { u -> if (u != null) vm.saveExportTo(u) else { vm.pendingSave = null; vm.pendingBatchSave = null } }
 
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
-    LaunchedEffect(lab.message) { lab.message?.let { snackbar.showSnackbar(it); lab.message = null } }
     // Tras exportar se ofrece guardar con el selector de archivos del sistema
     LaunchedEffect(vm.pendingSave) {
         vm.pendingSave?.let { if (it.suggestedName.endsWith(".zip")) saveZip.launch(it.suggestedName) else saveBin.launch(it.suggestedName) }
@@ -55,13 +53,7 @@ fun AppRoot(vm: AppViewModel, lab: LabViewModel) {
     // Al terminar la exportación masiva se ofrece guardar VEHICULOS_GLB.zip con el selector del sistema
     LaunchedEffect(vm.pendingBatchSave) { vm.pendingBatchSave?.let { saveZip.launch(it.name) } }
 
-    BackHandler(enabled = vm.screen != Screen.MENU) {
-        when {
-            vm.screen == Screen.TEXTURES && lab.texDoc != null -> lab.texClose()
-            vm.screen == Screen.WORKSHOP -> { lab.closeProject(); vm.back() }
-            else -> vm.back()
-        }
-    }
+    BackHandler(enabled = vm.screen != Screen.HOME) { vm.back() }
 
     val copy: (String) -> Unit = { text ->
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -80,21 +72,14 @@ fun AppRoot(vm: AppViewModel, lab: LabViewModel) {
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = Bg, contentWindowInsets = WindowInsets(0)) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
             when (vm.screen) {
-                Screen.MENU -> MenuScreen(vm, lab)
-                Screen.LIBRARY -> LibraryScreen(vm, lab)
-                Screen.GENERATOR -> GeneratorScreen(vm, lab)
-                Screen.WORKSHOP -> WorkshopScreen(vm, lab)
-                Screen.TEXTURES -> TextureScreen(vm, lab)
-                Screen.PROJECTS -> ProjectsScreen(vm, lab)
-                Screen.SETTINGS -> SettingsScreen(vm, lab)
-                Screen.HOME -> HomeScreen(vm, lab, onImport = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) })
+                Screen.HOME -> HomeScreen(vm, onImport = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) })
                 Screen.MANUAL -> ManualScreen(vm,
                     onImport = { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) },
                     onPickDff = { dffLauncher.launch(arrayOf("*/*")) }, onPickTxd = { txdLauncher.launch(arrayOf("*/*")) })
-                Screen.VIEWER -> ViewerScreen(vm, lab)
+                Screen.VIEWER -> ViewerScreen(vm)
                 Screen.DIAGNOSTICS -> DiagnosticsScreen(vm, copy)
             }
-            (vm.busyText ?: lab.busy)?.let { text ->
+            vm.busyText?.let { text ->
                 Surface(color = Color(0xCC000000), modifier = Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Accent)
@@ -103,7 +88,6 @@ fun AppRoot(vm: AppViewModel, lab: LabViewModel) {
                     }
                 }
             }
-            lab.importUi?.let { ImportDialog(lab, it) }
             vm.batchConfirm?.let { c -> BatchConfirmDialog(c, vm.batchFormat, onYes = { vm.confirmBatch() }, onNo = { vm.batchConfirm = null }) }
             if (vm.batchUi != null) BatchDialog(vm, shareFile)
             vm.exportResult?.let { res -> ExportResultDialog(res, onSave = { vm.pendingSave = res }, onShare = { share(res) }, onDismiss = { vm.exportResult = null }) }

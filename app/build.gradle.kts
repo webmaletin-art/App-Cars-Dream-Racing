@@ -61,17 +61,6 @@ android {
         resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES", "META-INF/INDEX.LIST", "META-INF/AL2.0", "META-INF/LGPL2.1")
     }
 
-    testOptions {
-        unitTests {
-            isIncludeAndroidResources = true; isReturnDefaultValues = true
-            // Entornos sin acceso directo a Maven pueden precargar el jar de Robolectric y apuntar ROBOLECTRIC_DIR a esa carpeta.
-            all { t ->
-                System.getenv("ROBOLECTRIC_DIR")?.let { t.systemProperty("robolectric.offline", "true"); t.systemProperty("robolectric.dependency.dir", it) }
-                t.maxHeapSize = "1g"
-            }
-        }
-    }
-
     lint {
         abortOnError = false
         checkReleaseBuilds = false
@@ -91,9 +80,4 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     debugImplementation("androidx.compose.ui:ui-tooling-preview")
     testImplementation(kotlin("test"))
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.13")
-    testImplementation("androidx.compose.ui:ui-test-junit4")
-    testImplementation("androidx.test:core:1.6.1")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

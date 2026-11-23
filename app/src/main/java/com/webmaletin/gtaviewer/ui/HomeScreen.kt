@@ -26,12 +26,12 @@ import com.webmaletin.gtaviewer.catalog.WorkflowStatus
 import com.webmaletin.gtaviewer.export.ExportFormat
 
 @Composable
-fun HomeScreen(vm: AppViewModel, lab: com.webmaletin.gtaviewer.LabViewModel, onImport: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, onImport: () -> Unit) {
     val report = vm.report
     var showPrep by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).statusBarsPadding()) {
-        TextButton(onClick = { vm.back() }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("← MENÚ PRINCIPAL", fontSize = 12.sp) }
-        Text("VISOR Y CONVERSOR", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Accent, letterSpacing = 1.sp)
+        Spacer(Modifier.height(14.dp))
+        Text("GTA VEHICLE VIEWER", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Accent, letterSpacing = 1.sp)
         Text("GTA San Andreas · DFF + TXD → Outliner → GLB / OBJ / FBX", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -110,13 +110,6 @@ fun HomeScreen(vm: AppViewModel, lab: com.webmaletin.gtaviewer.LabViewModel, onI
                         ExportFormat.values().forEach { f -> FilterChip(selected = vm.batchFormat == f, onClick = { vm.batchFormat = f }, label = { Text(f.name, fontSize = 12.sp) }) }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { showPrep = true }) { Text("PREPARACIÓN\nPARA MI JUEGO", fontSize = 10.sp, lineHeight = 12.sp) }
-                    }
-                    OutlinedButton(onClick = {
-                        val src = vm.items.filter { it.id in vm.selectedIds }.mapNotNull { vm.libraryItemOf(it) }
-                        if (src.isEmpty()) vm.message = "Seleccione vehículos para añadirlos al catálogo permanente"
-                        else { lab.importItems(src); vm.navigate(Screen.LIBRARY) }
-                    }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(6.dp)) {
-                        Text("AÑADIR SELECCIONADOS AL CATÁLOGO PERMANENTE (${vm.selectedIds.size})", fontSize = 12.sp, maxLines = 2)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = { vm.requestBatchSelected() }, enabled = vm.selectedIds.isNotEmpty(), modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp)) {
