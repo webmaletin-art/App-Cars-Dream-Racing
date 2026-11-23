@@ -83,6 +83,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val configs = HashMap<String, VehicleConfig>()
     var prepOptions by mutableStateOf(PrepOptions())
     var batchFormat by mutableStateOf(ExportFormat.GLB)
+    /** Los daños (*_dam) acompañan al vehículo por defecto. */
+    var damageMode by mutableStateOf(DamageMode.EMBEDDED)
+    var batchDamage by mutableStateOf(DamageMode.EMBEDDED)
     var batchConfirm by mutableStateOf<BatchConfirm?>(null)
     var batchUi by mutableStateOf<BatchUi?>(null); private set
     var pendingBatchSave by mutableStateOf<File?>(null)
@@ -509,14 +512,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val label = if (scope == ExportScope.SELECTION) selectionLabel() else null
         val edited = scope == ExportScope.VISIBLE && e.isEdited()
         val base = ExportNaming.baseName(m.name, edited, label)
-        val paintNow = paint; val scale = sceneScale
+        val paintNow = paint; val scale = sceneScale; val damageNow = damageMode
         viewModelScope.launch {
             exporting = true
             busyText = "Exportando ${format.label}..."
             try {
                 val out = withContext(Dispatchers.Default) {
-                    val scene = ExportSceneBuilder.build(m, ids, paintNow, scale, base)
-                    Exporters.forFormat(format).export(scene, base)
+                    // exportar una selección (p. ej. solo ruedas) nunca arrastra daños; el vehículo sí
+                    VehicleExport.export(m, ids, e.state.deleted, paintNow, scale, base, format, if (scope == ExportScope.SELECTION) DamageMode.NONE else damageNow)
                 }
                 val file = withContext(Dispatchers.IO) { ExportFiles.cacheFile(ctx, out.fileName).also { it.writeBytes(out.bytes) } }
                 log("Exportado ${out.fileName} (${out.bytes.size / 1024} KB; ${out.entries.size} archivo(s))${out.limitations?.let { " | $it" } ?: ""}")
@@ -615,6 +618,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Cada trabajo lleva SU PROPIA configuración (snapshot); nunca una global.
         val jobs = list.map { BatchJob(it.id, it.displayName, it.load, configs[it.id]) }
         val paintNow = paint
+        val dmgMode = batchDamage
         batchCancel = false
         batchUi = BatchUi(list.size, 0, emptyList(), false, null, null, zipName, format)
         viewModelScope.launch {
@@ -622,7 +626,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val lines = ArrayList<BatchLine>()
             val result = withContext(Dispatchers.Default) {
                 file.outputStream().buffered().use { out ->
-                    BatchExporter.run(jobs, format, out, paintNow, 1f, onProgress = { p ->
+                    BatchExporter.run(jobs, format, out, paintNow, 1f, dmgMode, onProgress = { p ->
                         synchronized(lines) {
                             lines.removeAll { it.name == p.name && it.state == BatchState.PROCESSING }
                             lines += BatchLine(p.name, p.state, p.message)

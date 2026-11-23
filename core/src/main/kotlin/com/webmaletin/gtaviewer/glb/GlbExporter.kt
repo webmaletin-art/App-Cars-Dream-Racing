@@ -69,6 +69,7 @@ class GlbExporter : SceneExporter {
         // Mallas: una por pieza, con una primitiva por (sub-mesh/material)
         val meshes = StringBuilder(); val nodes = StringBuilder()
         var meshCount = 0
+        val damageNodes = ArrayList<Int>()
         val byPart = scene.meshes.groupBy { it.partName }
         for ((partName, list) in byPart) {
             val prims = StringBuilder()
@@ -91,13 +92,22 @@ class GlbExporter : SceneExporter {
             }
             if (meshCount > 0) { meshes.append(','); nodes.append(',') }
             meshes.append("{\"name\":${q(partName)},\"primitives\":[$prims]}")
-            nodes.append("{\"name\":${q(partName)},\"mesh\":$meshCount}")
+            val isDamage = list.first().damage
+            nodes.append("{\"name\":${q(partName)},\"mesh\":$meshCount${if (isDamage) ",\"extras\":{\"gta_variant\":\"damage\"}" else ""}}")
+            if (isDamage) damageNodes += meshCount + 1
             meshCount++
         }
 
-        val childList = (1..meshCount).joinToString(",")
+        // Las piezas de daño cuelgan de un grupo «Danos» marcado invisible (KHR_node_visibility): motores que no lo soporten las
+        // mostrarían encima de las intactas, por eso el ZIP con archivos separados es la opción segura para ellos.
+        val groupIdx = meshCount + 1
+        val childList = (1..meshCount).filter { it !in damageNodes }.let { if (damageNodes.isNotEmpty()) it + groupIdx else it }.joinToString(",")
+        if (damageNodes.isNotEmpty()) {
+            nodes.append(",{\"name\":\"Danos\",\"children\":[${damageNodes.joinToString(",")}],\"extras\":{\"gta_variant\":\"damage_group\"},\"extensions\":{\"KHR_node_visibility\":{\"visible\":false}}}")
+        }
         val json = StringBuilder()
         json.append("{\"asset\":{\"version\":\"2.0\",\"generator\":\"GTA Vehicle Viewer\"},")
+        if (damageNodes.isNotEmpty()) json.append("\"extensionsUsed\":[\"KHR_node_visibility\"],")
         json.append("\"scene\":0,\"scenes\":[{\"name\":${q(scene.name)},\"nodes\":[0]}],")
         json.append("\"nodes\":[{\"name\":${q(scene.name)}${if (meshCount > 0) ",\"children\":[$childList]" else ""}}${if (meshCount > 0) ",$nodes" else ""}]")
         if (meshCount > 0) json.append(",\"meshes\":[$meshes]")

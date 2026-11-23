@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import com.webmaletin.gtaviewer.AppViewModel
 import com.webmaletin.gtaviewer.ExportResultUi
 import com.webmaletin.gtaviewer.ExportScope
+import com.webmaletin.gtaviewer.export.DamageMode
 import com.webmaletin.gtaviewer.export.ExportFormat
 
 @Composable
@@ -23,6 +24,29 @@ private fun FormatRow(selected: ExportFormat, onSelect: (ExportFormat) -> Unit) 
             Row(Modifier.fillMaxWidth().clickable { onSelect(f) }, verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = selected == f, onClick = { onSelect(f) })
                 Text(f.label)
+            }
+        }
+    }
+}
+
+val FormatHelp = mapOf(
+    ExportFormat.GLB to "ARCHIVO ÚNICO con geometría, materiales (con metálico/rugosidad) y texturas. Es el formato moderno y el mejor para tu juego: " +
+        "Godot, Blender, Unity (con paquete glTF), visores web y el Visor 3D de Windows lo abren directo. Las ruedas salen como piezas independientes. Recomendado.",
+    ExportFormat.OBJ to "ZIP con .obj + .mtl + carpeta de texturas PNG. Formato viejo y muy compatible: casi cualquier programa 3D lo abre (Blender, Maya, 3ds Max, MeshLab…). " +
+        "Sirve para retocar la malla a mano o si tu herramienta no acepta GLB. No guarda jerarquía ni materiales avanzados (solo color y textura simples).",
+    ExportFormat.FBX to "ZIP con .fbx (texto ASCII) + texturas PNG. Formato de Autodesk que piden Unity, Unreal, 3ds Max y Maya. Útil si tu flujo de trabajo es de esos programas. " +
+        "Aquí sale como lista plana de mallas con color y textura base (sin normal/specular); pesa más que el GLB.",
+)
+
+@Composable
+private fun DamageRow(selected: DamageMode, format: ExportFormat, onSelect: (DamageMode) -> Unit) {
+    Column {
+        DamageMode.values().forEach { d ->
+            // el GLB con daños dentro solo existe en GLB; OBJ/FBX usan el ZIP con archivos separados
+            val enabled = !(d == DamageMode.EMBEDDED && format != ExportFormat.GLB)
+            Row(Modifier.fillMaxWidth().clickable(enabled = enabled) { onSelect(d) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selected == d && enabled, onClick = { onSelect(d) }, enabled = enabled)
+                Column { Text(d.label, fontSize = 14.sp); Text(if (enabled) d.help else "No disponible en ${format.name}: use el ZIP con archivos separados.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }
@@ -40,7 +64,12 @@ fun ExportDialog(vm: AppViewModel, onDismiss: () -> Unit, onGo: (ExportFormat, E
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 SectionTitle("EXPORTAR VEHÍCULO")
-                FormatRow(fmtAll) { fmtAll = it }
+                FormatRow(fmtAll) { fmtAll = it; if (it != ExportFormat.GLB && vm.damageMode == DamageMode.EMBEDDED) vm.damageMode = DamageMode.SEPARATE_ZIP }
+                Text(FormatHelp.getValue(fmtAll), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SectionTitle("DAÑOS DEL VEHÍCULO")
+                DamageRow(vm.damageMode, fmtAll) { vm.damageMode = it }
+                Text("Los daños (*_dam) se exportan junto con el vehículo, no como piezas sueltas. Si falta la pieza intacta (por ejemplo, quitó una puerta), su daño tampoco sale.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
                 Text("Se exporta exactamente lo que está visible${if (vm.isEdited) " (vehículo editado)" else ""}: partes marcadas = incluidas, desmarcadas = fuera.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 vm.counters?.let { Text("Partes visibles: ${it.partsVisible} / ${it.partsTotal}", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                 Button(onClick = { onGo(fmtAll, ExportScope.VISIBLE) }, modifier = Modifier.fillMaxWidth()) { Text("EXPORTAR ESTE VEHÍCULO", fontWeight = FontWeight.Bold) }

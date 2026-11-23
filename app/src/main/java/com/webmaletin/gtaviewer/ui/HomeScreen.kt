@@ -107,9 +107,16 @@ fun HomeScreen(vm: AppViewModel, onImport: () -> Unit) {
                 Column(Modifier.padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("ZIP de:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        ExportFormat.values().forEach { f -> FilterChip(selected = vm.batchFormat == f, onClick = { vm.batchFormat = f }, label = { Text(f.name, fontSize = 12.sp) }) }
+                        ExportFormat.values().forEach { f -> FilterChip(selected = vm.batchFormat == f, onClick = { vm.batchFormat = f; if (f != ExportFormat.GLB && vm.batchDamage == com.webmaletin.gtaviewer.export.DamageMode.EMBEDDED) vm.batchDamage = com.webmaletin.gtaviewer.export.DamageMode.SEPARATE_ZIP }, label = { Text(f.name, fontSize = 12.sp) }) }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { showPrep = true }) { Text("PREPARACIÓN\nPARA MI JUEGO", fontSize = 10.sp, lineHeight = 12.sp) }
+                    }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Daños:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        com.webmaletin.gtaviewer.export.DamageMode.values().forEach { d ->
+                            val ok = !(d == com.webmaletin.gtaviewer.export.DamageMode.EMBEDDED && vm.batchFormat != ExportFormat.GLB)
+                            FilterChip(selected = vm.batchDamage == d && ok, enabled = ok, onClick = { vm.batchDamage = d }, label = { Text(d.label, fontSize = 11.sp) })
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = { vm.requestBatchSelected() }, enabled = vm.selectedIds.isNotEmpty(), modifier = Modifier.weight(1f), contentPadding = PaddingValues(6.dp)) {

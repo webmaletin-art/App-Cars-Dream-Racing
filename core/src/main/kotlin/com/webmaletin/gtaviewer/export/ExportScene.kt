@@ -31,6 +31,8 @@ class ExportMesh(
     val normals: FloatArray,
     val uvs: FloatArray,
     val indices: IntArray,
+    /** Pieza de daño (`*_dam`). */
+    val damage: Boolean = false,
 ) {
     val vertexCount get() = positions.size / 3
     val triangleCount get() = indices.size / 3
@@ -53,7 +55,7 @@ object ExportSceneBuilder {
      * o la selección). Las transformaciones de cada pieza (incluidas las instancias de rueda) se hornean en los vértices.
      * @param scale factor uniforme de escena (1 = metros originales).
      */
-    fun build(model: VehicleModel, subIds: Set<Int>, paint: PaintScheme = PaintScheme(), scale: Float = 1f, name: String = model.name): ExportScene {
+    fun build(model: VehicleModel, subIds: Set<Int>, paint: PaintScheme = PaintScheme(), scale: Float = 1f, name: String = model.name, markDamage: Boolean = true): ExportScene {
         val warnings = ArrayList<String>()
         val materials = LinkedHashMap<String, ExportMaterial>()
         val textures = LinkedHashMap<String, ExportTexture>()
@@ -110,7 +112,7 @@ object ExportSceneBuilder {
                 if (flip) { var i = 0; while (i + 2 < idx.size) { val t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; i += 3 } }
                 val mat = materialFor(sm.material)
                 val meshName = if (part.subMeshes.size == 1) part.name else "${part.name}_${mat.name}"
-                meshes += ExportMesh(part.name, meshName, mat, pos, nor, uv, idx)
+                meshes += ExportMesh(part.name, meshName, mat, pos, nor, uv, idx, markDamage && part.isDamage)
                 if (k >= 0 && sm.material.textureMissing) warnings += "Material '${sm.material.textureName}' sin textura (se exporta el color)"
             }
         }

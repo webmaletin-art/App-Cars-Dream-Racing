@@ -43,6 +43,7 @@ object BatchExporter {
         out: OutputStream,
         paint: PaintScheme = PaintScheme(),
         scale: Float = 1f,
+        damage: DamageMode = DamageMode.EMBEDDED,
         onProgress: (BatchProgress) -> Unit = {},
         isCancelled: () -> Boolean = { false },
     ): BatchResult {
@@ -70,16 +71,21 @@ object BatchExporter {
                     if (m.validation.needsReview) warn += "modelo requiere revisión (${m.validation.reasons.firstOrNull()})"
 
                     val base = uniqueBase(ExportNaming.fileSafe(job.name), usedNames)
-                    val scene = ExportSceneBuilder.build(m, visible, paint, scale, base)
-                    val exported = Exporters.forFormat(format).export(scene, base)
-                    if (format == ExportFormat.GLB) {
+                    val exported = VehicleExport.export(m, visible, session.state.deleted, paint, scale, base, format, damage)
+                    if (exported.mime == ExportFormat.GLB.mime) { // un solo GLB (con o sin daños dentro)
                         zip.putNextEntry(ZipEntry(exported.fileName)); zip.write(exported.bytes); zip.closeEntry()
                         okFiles += exported.fileName
-                    } else { // OBJ/FBX: una carpeta por vehículo con sus archivos y texturas
+                    } else { // ZIP (OBJ/FBX, o GLB con daños separados): una carpeta por vehículo con todos sus archivos
                         ZipInputStream(ByteArrayInputStream(exported.bytes)).use { zin ->
                             while (true) {
                                 val e = zin.nextEntry ?: break
-                                zip.putNextEntry(ZipEntry("$base/${e.name}")); zin.copyTo(zip); zip.closeEntry()
+                                // OBJ/FBX con daños: «base/…» queda tal cual y «base_danos/…» pasa a «base/danos/…» (todo dentro de la carpeta del vehículo)
+                                val inner = when {
+                                    e.name.startsWith("${base}_danos/") -> "danos/" + e.name.removePrefix("${base}_danos/")
+                                    e.name.startsWith("$base/") -> e.name.removePrefix("$base/")
+                                    else -> e.name
+                                }
+                                zip.putNextEntry(ZipEntry("$base/$inner")); zin.copyTo(zip); zip.closeEntry()
                             }
                         }
                         okFiles += "$base/"

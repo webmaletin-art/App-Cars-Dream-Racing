@@ -4,12 +4,14 @@ package com.webmaletin.gtaviewer.model
 object PartClassifier {
     class Result(val category: PartCategory, val slot: WheelSlot?, val recognized: Boolean, val variant: String?)
 
+    const val DAMAGE_NOTE = "variante dañada"
+
     private val suffixes = listOf("_ok", "_dam", "_vlo", "_lod", "_dummy", "_shiny")
 
     fun variantOf(name: String): String? {
         val n = name.lowercase()
         return when {
-            n.endsWith("_dam") -> "variante dañada"
+            n.endsWith("_dam") -> DAMAGE_NOTE
             n.endsWith("_vlo") || n.endsWith("_lod") -> "variante LOD (baja)"
             else -> null
         }

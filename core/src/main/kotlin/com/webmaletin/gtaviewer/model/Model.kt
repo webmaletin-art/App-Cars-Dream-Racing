@@ -80,7 +80,10 @@ class MeshPart(
     /** true si el nombre/categoría viene de nombres de frame reconocidos (no adivinado). */
     val recognized: Boolean,
     val extraSource: String? = null,
-)
+) {
+    /** Variante dañada (`*_dam`) de una pieza del vehículo: se exporta aparte o en un grupo oculto, nunca mezclada con las intactas. */
+    val isDamage: Boolean get() = variantNote == PartClassifier.DAMAGE_NOTE
+}
 
 class ModelDiagnostics(
     val dffFileName: String,

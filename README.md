@@ -40,6 +40,26 @@ Requisitos: JDK 17+, Android SDK 34 (`local.properties` con `sdk.dir`).
 6. **MODO MANUAL** (siempre disponible): elige cualquier DFF y cualquier TXD (del ZIP navegando carpetas, o del dispositivo), o «Cargar DFF sin TXD».
 7. **Diagnóstico**: contadores del ZIP, DFF/TXD válidos, materiales/texturas encontradas y faltantes, errores de chunks, parser usado, log copiable.
 
+## Formatos de exportación (para qué sirve cada uno)
+
+| Formato | Qué es | Úsalo cuando |
+|---|---|---|
+| **GLB** | Un solo archivo con geometría, materiales (metálico/rugosidad) y texturas. Ruedas como piezas independientes. | **Tu juego** (Godot, Blender, Unity con glTF, visores web, Visor 3D de Windows). Es el recomendado. |
+| **OBJ + MTL + texturas** (ZIP) | Formato antiguo y muy compatible: `.obj` + `.mtl` + PNG. Sin jerarquía ni materiales avanzados. | Tu programa no acepta GLB, o vas a retocar la malla a mano (Blender, Maya, 3ds Max, MeshLab). |
+| **FBX + texturas** (ZIP) | FBX 7.4 en texto ASCII + PNG. Lista plana de mallas con color y textura base. | Flujos de Unity/Unreal/3ds Max/Maya que piden FBX. Pesa más que el GLB. |
+
+## Daños (`*_dam`)
+
+Las variantes dañadas del DFF (`bonnet_dam`, `door_lf_dam`, `chassis_dam`…) se ocultan en el visor, pero **al exportar un vehículo van con él** (por defecto):
+
+* **Daños dentro del mismo GLB**: un solo archivo; las piezas dañadas cuelgan de un grupo `Danos` marcado invisible con `KHR_node_visibility`
+  (y `extras.gta_variant`). Si tu programa no soporta esa extensión, verá los daños superpuestos a las piezas intactas.
+* **ZIP: vehículo + daños**: un solo ZIP con `Vehiculo.glb` y `Vehiculo_danos.glb` (en OBJ/FBX, carpetas `Vehiculo/` y `Vehiculo_danos/`). Funciona en cualquier programa.
+* **Sin daños**: como antes.
+
+Una pieza dañada solo acompaña si su pieza intacta se exporta (si quitas una puerta, su daño tampoco sale). Exportar una *selección* (p. ej. las ruedas) nunca arrastra daños.
+En la exportación masiva cada vehículo lleva sus daños con la misma opción (en el ZIP masivo, `Vehiculo/danos/` para OBJ/FBX).
+
 ## Flujo «preparar para mi juego» (Outliner + exportación masiva)
 
 1. **Outliner** (botón OUTLINER del visor, panel lateral estilo Blender): lista *todas* las partes del DFF (10, 35… las que haya; sin nombre → `Mesh 001…`).
